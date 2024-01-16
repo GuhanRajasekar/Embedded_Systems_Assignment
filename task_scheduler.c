@@ -1,5 +1,6 @@
 #include<stdlib.h>
 #include<stdio.h>
+#include<stdbool.h>
 /*
    TCB ( Task control block) contains all the necessary information related to the task.
 */
@@ -17,6 +18,53 @@ struct TCB* ready_head;                // pointer pointing to first task of read
 struct TCB* waiting_head;              // pointer pointing to first task of waiting_queue
 
 
+// function to check if the task is present in the ready_queue
+// If present, this function will return the position of the task in the ready_queue
+int isTask_In_Ready_Queue(int id)
+{
+  int pos  = 1; // variable to indicate the position of the task in the ready_queue
+  int flag = 0; // variable to indicate whether the task is present in the ready_queue or not
+  struct TCB* temp = ready_head;
+  if(temp == NULL) return -1; // ready_queue is empty
+  while(temp!= NULL)
+  {
+    if(temp -> task_id == id)
+    {
+        flag = 1;
+        return pos;
+    }
+    pos += 1;                      // Increment the position variable
+    temp = temp->ptr_next_task;    // Move the pointer to point to the next task
+  }
+  if(flag == 0) return -1; //task not present in the ready_queue
+}
+
+
+// function to check if the task is present in the waiting_queue
+// If present, this function will return the position of the task in the waiting_queue
+int isTask_In_Waiting_Queue(int id)
+{
+  int pos  = 1; // variable to indicate the position of the task in the waiting_queue
+  int flag = 0; // variable to indicate whether the task is present in the waiting_queue or not
+  struct TCB* temp = waiting_head;
+  if(temp == NULL) return -1; // waiting_queue is empty
+  while(temp!= NULL)
+  {
+    if(temp -> task_id == id)
+    {
+        flag = 1;
+        return pos;
+    }
+    pos  += 1;                     // Increment the position variable
+    temp = temp->ptr_next_task;    // Move the pointer to point to the next task
+  }
+  if(flag == 0) return -1;  // task not present in the waiting_queue
+}
+
+
+// function to update the status of the tasks in the ready_queue
+// Except the first task in the ready queue, all the other tasks have a task state of 2, to indicate ready
+// The first task in the ready queue will have a status of 3, to indicate that it is the running task
 void update_running_task()
 {
    if(ready_head != NULL) ready_head -> task_state = 3; // first task of the ready_queue is the running task
@@ -28,7 +76,8 @@ void update_running_task()
    }
    return;
 }
-// function to return the position in which a task needs to be inserted in the ready_queue
+
+// function to return the position in which a task needs to be inserted in the ready_queue based on its priority
 int getPos(int priority)
 {
     int pos  = 1;   // position in which the task needs to be placed in the ready_queue
@@ -156,7 +205,7 @@ void print_tasks()
         {
             printf("Task ID       : %d\n",temp2->task_id);
             printf("Task Priority : %d\n",temp2->task_priority);
-            printf("Task State    : %d\n",temp2->task_state);
+            printf("Task State    : Waiting\n");
             printf("Task Event ID : %d\n",temp2->task_event_id);
             printf("\n");  // for readability
             temp2 = temp2->ptr_next_task;
@@ -171,7 +220,8 @@ void print_tasks()
         {
             printf("Task ID       : %d\n",temp1->task_id);
             printf("Task Priority : %d\n",temp1->task_priority);
-            printf("Task State    : %d\n",temp1->task_state);
+            if(temp1->task_state == 3)          printf("Task State    : Runnning\n");
+            else if(temp1->task_state == 2)     printf("Task State    : Ready\n");
             printf("Task Event ID : %d\n",temp1->task_event_id);
             printf("\n");  // for readability
             temp1 = temp1->ptr_next_task;
@@ -179,6 +229,80 @@ void print_tasks()
     }
 
     return;
+}
+
+void delete_Tasks(int pos, int flag)
+{
+    struct TCB* temp1;
+    struct TCB* temp2;
+    if(flag == 1)  // delete task from the waiting_queue
+     {
+         temp1 = waiting_head;
+         if(pos == 1)     // delete first task from the waiting_queue
+         {
+            waiting_head = waiting_head->ptr_next_task;
+            free(temp1);   // free up the dynamically created memory (delete the task)
+         }
+         else            // delete an intermediate task from the waiting_queue
+         {
+            for(int i = 1;i<(pos-1);i++)  // go to one position before the task that needs to be deleted
+            {
+                temp1 = temp1->ptr_next_task;
+            }
+            temp2 = temp1->ptr_next_task;
+            temp1->ptr_next_task = temp2->ptr_next_task;
+            free(temp2);
+         }
+     }
+    else if(flag == 2)     // delete task from the ready_queue
+     {
+         temp1 = ready_head;
+         if(pos == 1)     // delete first task from the ready_queue
+         {
+            ready_head = ready_head->ptr_next_task;
+            free(temp1);   // free up the dynamically created memory (delete the task)
+         }
+         else            // delete an intermediate task from the ready_queue
+         {
+            for(int i = 1;i<(pos-1);i++)  // go to one position before the task that needs to be deleted
+            {
+                temp1 = temp1->ptr_next_task;
+            }
+            temp2 = temp1->ptr_next_task;
+            temp1->ptr_next_task = temp2->ptr_next_task;
+            free(temp2);
+         }
+     }
+    return;
+}
+
+// function to move tasks from ready_queue to waiting_queue
+void move_task_ready_to_wait(int event_id,int pos)
+{
+    struct TCB* temp = ready_head;
+    for(int i=1;i<pos;i++) temp = temp->ptr_next_task;  // make temp point to the necessary pointer in the ready_queue
+    Insert_waiting_queue(temp->task_id,temp->task_priority,event_id); // insert the task in the waiting_queue
+    delete_Tasks(pos,2); // delete the concerned task from the ready_queue
+    update_running_task(); // update the status of the tasks in the running queue
+    return;
+}
+
+// function to trigger the event with the mentioned Event ID and the move the corresponding tasks to the Ready Queue
+void move_task_wait_to_ready(int event_id)
+{
+    struct TCB* temp = waiting_head;
+    int pos = 1; // function of the task to be removed from the waiting_queue
+    while(temp != NULL)
+    {
+        if(temp->task_event_id == event_id)
+        {
+            Insert_ready_queue(temp->task_id,temp->task_priority);
+            update_running_task();
+            delete_Tasks(pos,1);  // delete the correspoding task from the waiting_queue
+        }
+        temp = temp->ptr_next_task;  // iterate over the waiting_queue to remove other tasks with the same event ID
+        pos += 1;
+    }
 }
 int main()
 {
@@ -195,7 +319,7 @@ int main()
     Insert_waiting_queue(213,16,7);
 
     //Inserting dummy entries in the ready_queue
-    Insert_ready_queue(27,7);
+    Insert_ready_queue(28,7);
     Insert_ready_queue(77,64);
     Insert_ready_queue(108,16);
     Insert_ready_queue(57,1);
@@ -230,7 +354,54 @@ int main()
             printf("\n");
             print_tasks();
             break;
+
+        // Delete a task from ready or waiting queue
+        case 2:
+            int pos; // position of the task that needs to be deleted in the ready_queue or the waiting_queue
+            printf("Enter a task ID that needs to be deleted: ");
+            scanf("%d",&task_id);
+            
+            if(isTask_In_Waiting_Queue(task_id) != -1)    // delete task from the waiting queue
+            {
+                pos = isTask_In_Waiting_Queue(task_id);
+                delete_Tasks(pos,1);  // flag 1 indicates that element to be deleted is present in the waiting_queue
+                print_tasks();
+            }
+            
+            else if(isTask_In_Ready_Queue(task_id) != -1) // delete task from the waiting queue
+            {
+                pos = isTask_In_Ready_Queue(task_id);
+                delete_Tasks(pos,2);                            // flag 2 indicates that element to be deleted is present in the waiting_queue
+                if(ready_head != NULL) update_running_task();   // Update the read_queue in case the running task has been deleted
+                print_tasks();
+            }
+            else printf("Task is neither present in the ready_queue nor in the waiting_queue\n");
+            break;
         
+        // Move task from ready_queue to waiting_queue with the mentioned event_id
+        case 3:
+            printf("Enter the task ID that needs to be moved from Ready to Waiting Queue: ");
+            scanf("%d",&task_id);
+            pos = isTask_In_Ready_Queue(task_id);
+            if(pos == -1)  // mentioned task is not present in the ready_queue
+            {
+                printf("Mentioned task is not present in Ready Queue\n\n");
+                break;
+            }
+            printf("Enter Event ID: ");
+            scanf("%d",&event_id);
+            move_task_ready_to_wait(event_id,pos);  // move the task from ready_queue to waiting_queue
+            print_tasks();
+           break;
+        
+        // Trigger the event with event ID  => Move tasks from the mentioned event ID from the waiting queue to the ready queue
+        case 4:
+           printf("Enter the Event ID: ");
+           scanf("%d",&event_id);
+           move_task_wait_to_ready(event_id);
+           print_tasks();
+           break;
+
         // Suspend a running task with the given event ID
         case 5:
             printf("Enter the Event ID: ");
