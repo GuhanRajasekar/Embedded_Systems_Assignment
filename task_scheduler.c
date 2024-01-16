@@ -1,6 +1,5 @@
 #include<stdlib.h>
 #include<stdio.h>
-#include<stdbool.h>
 /*
    TCB ( Task control block) contains all the necessary information related to the task.
 */
