@@ -1,5 +1,6 @@
 #include<stdlib.h>
 #include<stdio.h>
+#include<string.h>
 /*
    TCB ( Task control block) contains all the necessary information related to the task.
 */
@@ -219,7 +220,7 @@ void print_tasks()
         {
             printf("Task ID       : %d\n",temp1->task_id);
             printf("Task Priority : %d\n",temp1->task_priority);
-            if(temp1->task_state == 3)          printf("Task State    : Runnning\n");
+            if(temp1->task_state == 3)          printf("Task State    : Running\n");
             else if(temp1->task_state == 2)     printf("Task State    : Ready\n");
             printf("Task Event ID : %d\n",temp1->task_event_id);
             printf("\n");  // for readability
@@ -310,18 +311,49 @@ int main()
     int x;                  // to take input from the user regarding what task has to be performed
     int task_id,event_id,task_priority; // variables to store information regarding the task
     
+    FILE *fp;
+    char line[100];
+    char *token;
+    int data[100][4];  // Adjust dimensions as needed
+    int row = 0;
 
-    //Inserting dummy entries in the waiting_queue
-    Insert_waiting_queue(54,2,21);
-    Insert_waiting_queue(25,6,29);
-    Insert_waiting_queue(27,7,127);
-    Insert_waiting_queue(213,16,7);
+    // Open the file
+    fp = fopen("init_tasks.txt", "r");
+    if (fp == NULL) {
+        printf("Error opening file!\n");
+        exit(1);
+    }
 
-    //Inserting dummy entries in the ready_queue
-    Insert_ready_queue(28,7);
-    Insert_ready_queue(77,64);
-    Insert_ready_queue(108,16);
-    Insert_ready_queue(57,1);
+    // Skip the header line
+    fgets(line, sizeof(line), fp);
+
+    // Read each line and store values in the array
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        token = strtok(line, ",");
+        int col = 0;
+        while (token != NULL) {
+            data[row][col] = atoi(token);  // Convert string to integer
+            token = strtok(NULL, ",");
+            col++;
+        }
+        row++;
+    }
+
+    // Close the file
+    fclose(fp);
+
+    // Now you have the CSV values in the 2D array `data`
+    Insert_waiting_queue(data[0][0],data[0][1],data[0][3]);
+    Insert_waiting_queue(data[1][0],data[1][1],data[1][3]);
+    Insert_waiting_queue(data[2][0],data[2][1],data[2][3]);
+    Insert_waiting_queue(data[3][0],data[3][1],data[3][3]);
+
+    Insert_ready_queue(data[4][0] , data[4][1]);
+    Insert_ready_queue(data[5][0] , data[5][1]);
+    Insert_ready_queue(data[6][0] , data[6][1]);
+    Insert_ready_queue(data[7][0] , data[7][1]);
+
+
     
     print_tasks();
 
