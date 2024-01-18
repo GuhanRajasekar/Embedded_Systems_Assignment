@@ -11,15 +11,35 @@
 #define NO_COLOR           0x00  // No color
 
 void delayMs(int n);
-int count_key1 = 0;     // to keep track of the number of times SW1 was pressed
-int read_sw1()
+int sw1_pressed = 0;   // flag to indicate if sw1 has been pressed
+int sw2_pressed = 0;   // flag to indicate if sw2 has been pressed
+int count_sw1 = 0;     // to keep track of the number of times SW1 was pressed
+int count_sw2 = 0;     // to keep track of the number of times SW2 was pressed
+int on_time = 1000;
+int off_time = 1000;
+void read_sw1()
 {
-    int x ;
-    // read x pin for sufficient time to record the change
-    for(int i=0;i<20;i++) x = GPIO_PORTF_DATA_R & 0x10 ;
-    if(x==0) count_key1 += 1;
-    if(count_key1 == 8) count_key1 = 1;  // once all the 7 colors are done, start from green
-    return count_key1;
+    int current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;
+    sw1_pressed = 0;
+    if((current_state_sw1) == 0)
+    {
+        for(int i = 0 ; i<100; i++)
+        {
+            for(int j = 0; j < 1200; j++)
+            {
+                // check for key press periodically
+            }
+        }
+
+        current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;
+        if(current_state_sw1 == 0)
+        {
+            sw1_pressed = 1;
+            count_sw1 = count_sw1 + 1;
+            if(count_sw1 == 8) count_sw1 = 1;
+        }
+    }
+    return;
 }
 int main(void)
 {
@@ -35,57 +55,53 @@ while(1)
     {
        for(;;)
        {
-           // increasing the read time so that the press gets recorded
-           int n = read_sw1();
-           switch(n)
+           read_sw1();
+           switch(count_sw1)
            {
               case 1: GPIO_PORTF_DATA_R = COLOR_GREEN_ON;
-                      delayMs(1000);
+                      delayMs(on_time);
                       GPIO_PORTF_DATA_R = NO_COLOR;
-                      delayMs(1000);
+                      delayMs(off_time);
                       break;
 
               case 2: GPIO_PORTF_DATA_R = COLOR_BLUE_ON;
-                      delayMs(1000);
+                      delayMs(on_time);
                       GPIO_PORTF_DATA_R = NO_COLOR;
-                      delayMs(1000);
+                      delayMs(off_time);
                       break;
 
               case 3: GPIO_PORTF_DATA_R = COLOR_CYAN_ON;
-                      delayMs(1000);
+                      delayMs(on_time);
                       GPIO_PORTF_DATA_R = NO_COLOR;
-                      delayMs(1000);
+                      delayMs(off_time);
                       break;
 
               case 4: GPIO_PORTF_DATA_R = COLOR_RED_ON;
-                      delayMs(1000);
+                      delayMs(on_time);
                       GPIO_PORTF_DATA_R = NO_COLOR;
-                      delayMs(1000);
+                      delayMs(off_time);
                       break;
 
               case 5: GPIO_PORTF_DATA_R = COLOR_YELLOW_ON;
-                      delayMs(1000);
+                      delayMs(on_time);
                       GPIO_PORTF_DATA_R = NO_COLOR;
-                      delayMs(1000);
+                      delayMs(off_time);
                       break;
 
               case 6: GPIO_PORTF_DATA_R = COLOR_MAGENTA_ON;
-                      delayMs(1000);
+                      delayMs(on_time);
                       GPIO_PORTF_DATA_R = NO_COLOR;
-                      delayMs(1000);
+                      delayMs(off_time);
                       break;
 
               case 7: GPIO_PORTF_DATA_R = COLOR_WHITE_ON;
-                      delayMs(1000);
+                      delayMs(on_time);
                       GPIO_PORTF_DATA_R = NO_COLOR;
-                      delayMs(1000);
+                      delayMs(off_time);
                       break;
 
-              default: GPIO_PORTF_DATA_R = COLOR_WHITE_ON;
-                      delayMs(1000);
-                      GPIO_PORTF_DATA_R = NO_COLOR;
-                      delayMs(1000);
-                      break;
+              default: GPIO_PORTF_DATA_R = NO_COLOR;
+                       break;
            }
        }
     }
@@ -97,5 +113,19 @@ void delayMs(int n)
 {
     int i, j;
     for(i = 0 ; i < n; i++)
-    for(j = 0; j < 3180; j++) {}    /* do nothing for 1 ms */
+    {
+        for(j = 0; j < 3180; j++)
+        {
+            /* do nothing for 1 ms */
+            // check for key press periodically
+        }
+        // for every 200ms keep checking if key1 has been pressed
+        if((i%10) == 0)
+        {
+            read_sw1();
+            if(sw1_pressed == 1) return;
+        }
+
+    }
+    return;  // sw1 not pressed during the entire duration of the delay
 }
