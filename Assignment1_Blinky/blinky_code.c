@@ -119,12 +119,9 @@ void delayMs(int n)
             /* do nothing for 1 ms */
             // check for key press periodically
         }
-        // for every 200ms keep checking if key1 has been pressed
-        if((i%10) == 0)
-        {
-            read_sw1();
-            if(sw1_pressed == 1) return;
-        }
+        // for every 1ms keep checking if key1 has been pressed
+        read_sw1();
+        if(sw1_pressed == 1) return;
 
     }
     return;  // sw1 not pressed during the entire duration of the delay
