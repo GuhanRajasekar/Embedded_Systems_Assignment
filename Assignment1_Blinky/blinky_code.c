@@ -15,7 +15,7 @@ int sw1_pressed = 0;   // flag to indicate if sw1 has been pressed
 int sw2_pressed = 0;   // flag to indicate if sw2 has been pressed
 int count_sw1 = 1;     // to keep track of the number of times SW1 was pressed
 int count_sw2 = 0;     // to keep track of the number of times SW2 was pressed (initialized to zero to make it compatible with switch case statement used in read_sw2 function)
-float on_off_delay = 1000;
+float on_off_delay = 500;
 void read_sw1()
 {
     int current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;   // read the status of sw1
@@ -62,19 +62,19 @@ void read_sw2()
             if(count_sw2 == 7) count_sw2 = 1;
             switch(count_sw2)
             {
-               case 1: on_off_delay = 500;   // blink 2 times in two seconds
+               case 1: on_off_delay = 250;    // blink 2 times in two seconds
                        break;
 
-               case 2: on_off_delay = 250;   // blink 4 times in two seconds
+               case 2: on_off_delay = 125;    // blink 4 times in two seconds
                        break;
 
-               case 3: on_off_delay = 125;   // blink 8 times in two seconds
+               case 3: on_off_delay = 62.5;   // blink 8 times in two seconds
                        break;
 
-               case 4: on_off_delay = 62.5;  // blink 16 times in two seconds
+               case 4: on_off_delay = 31.25;  // blink 16 times in two seconds
                        break;
 
-               case 5: on_off_delay = 31.25;  // blink 32 times in two seconds => blink 16 times in one second => MAX SPEED (LED Constantly On)
+               case 5: on_off_delay = 15.625;  // blink 32 times in two seconds => blink 16 times in one second => MAX SPEED (LED Constantly On)
                        break;
 
                case 6: on_off_delay = 1000;   // After max speed switch back to blinking once a second
@@ -105,43 +105,43 @@ while(1)
            {
               case 1: GPIO_PORTF_DATA_R = COLOR_GREEN_ON;
                       delayMs(on_off_delay);
-                      if(on_off_delay != 31.25) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
+                      if(on_off_delay != 15.625) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
                       delayMs(on_off_delay);
                       break;
 
               case 2: GPIO_PORTF_DATA_R = COLOR_BLUE_ON;
                       delayMs(on_off_delay);
-                      if(on_off_delay != 31.25) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
+                      if(on_off_delay != 15.625) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
                       delayMs(on_off_delay);
                       break;
 
               case 3: GPIO_PORTF_DATA_R = COLOR_CYAN_ON;
                       delayMs(on_off_delay);
-                      if(on_off_delay != 31.25) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
+                      if(on_off_delay != 15.625) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
                       delayMs(on_off_delay);
                       break;
 
               case 4: GPIO_PORTF_DATA_R = COLOR_RED_ON;
                       delayMs(on_off_delay);
-                      if(on_off_delay != 31.25) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
+                      if(on_off_delay != 15.625) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
                       delayMs(on_off_delay);
                       break;
 
               case 5: GPIO_PORTF_DATA_R = COLOR_YELLOW_ON;
                       delayMs(on_off_delay);
-                      if(on_off_delay != 31.25) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
+                      if(on_off_delay != 15.625) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
                       delayMs(on_off_delay);
                       break;
 
               case 6: GPIO_PORTF_DATA_R = COLOR_MAGENTA_ON;
                       delayMs(on_off_delay);
-                      if(on_off_delay != 31.25) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
+                      if(on_off_delay != 15.625) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
                       delayMs(on_off_delay);
                       break;
 
               case 7: GPIO_PORTF_DATA_R = COLOR_WHITE_ON;
                       delayMs(on_off_delay);
-                      if(on_off_delay != 31.25) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
+                      if(on_off_delay != 15.625) GPIO_PORTF_DATA_R = NO_COLOR;   // to make sure that LED is completely ON when MAX speed is reached (16 times in 1s)
                       delayMs(on_off_delay);
                       break;
 
