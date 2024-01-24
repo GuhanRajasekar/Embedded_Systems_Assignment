@@ -2,7 +2,7 @@
 #include<stdio.h>
 #include<string.h>
 /*
-   TCB ( Task control block) contains all the necessary information related to the task.
+    TCB ( Task control block) contains all the necessary information related to the task.
 */
 struct TCB
 {
