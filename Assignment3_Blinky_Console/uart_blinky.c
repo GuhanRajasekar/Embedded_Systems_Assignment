@@ -24,8 +24,7 @@ void delayMs(int n);          // Software function to implement delay
 char console_cmd_buffer[30];  // global character array to store the echo the contents given by the user
 char val;                     // global character variable that is used across functions to read data from the console
 int Color = -1;               // global variable to denote which color is currently active
-int Blink_Rate = 1000;        // global integer to store the blink rate
-
+int Blink_Delay = 61.25;        // global integer to store the blink rate
 
 int findColor()               // Function to determine which color needs to be lit
 {
@@ -42,16 +41,70 @@ int findColor()               // Function to determine which color needs to be l
 int findBlinkRate()
 {
     if     (strstr(console_cmd_buffer ,"Blink 16"))  return 61.25;
-    if(strstr(console_cmd_buffer ,"Blink 2"))        return 500;
-    if(strstr(console_cmd_buffer ,"Blink 4"))        return 250;
-    if(strstr(console_cmd_buffer ,"Blink 8"))        return 125;
-    if(strstr(console_cmd_buffer ,"Blink 1"))        return 1000;  // Not happening as Blink 1 is a subset of Blink 16. Hence Blink_Rate is being set as 1000
-    if(strstr(console_cmd_buffer ,"Blink 32"))       return 31.25;
-    return 1000; // Default value
+    if(strstr(console_cmd_buffer ,"Blink 2"))        return 61.25; //500;
+    if(strstr(console_cmd_buffer ,"Blink 4"))        return 61.25; //250;
+    if(strstr(console_cmd_buffer ,"Blink 8"))        return 61.25; //125;
+    if(strstr(console_cmd_buffer ,"Blink 1"))        return 61.25; //1000;  // Not happening as Blink 1 is a subset of Blink 16. Hence Blink_Rate is being set as 1000
+    if(strstr(console_cmd_buffer ,"Blink 32"))       return 61.25; //31.25;
+    return 61.25;//1000; // Default value
 }
+void processColors()
+{
+    switch(Color)
+       {
+          case 1: GPIO_PORTF_DATA_R = COLOR_GREEN_ON;
+                  delayMs(Blink_Delay);
+                  GPIO_PORTF_DATA_R = NO_COLOR;
+                  delayMs(Blink_Delay);
+                  break;
+
+          case 2: GPIO_PORTF_DATA_R = COLOR_BLUE_ON;
+                  delayMs(Blink_Delay);
+                  GPIO_PORTF_DATA_R = NO_COLOR;
+                  delayMs(Blink_Delay);
+                  break;
+
+          case 3: GPIO_PORTF_DATA_R = COLOR_CYAN_ON;
+                  delayMs(Blink_Delay);
+                  GPIO_PORTF_DATA_R = NO_COLOR;
+                  delayMs(Blink_Delay);
+                  break;
+
+          case 4: GPIO_PORTF_DATA_R = COLOR_RED_ON;
+                  delayMs(Blink_Delay);
+                  GPIO_PORTF_DATA_R = NO_COLOR;
+                  delayMs(Blink_Delay);
+                  break;
+
+          case 5: GPIO_PORTF_DATA_R = COLOR_YELLOW_ON;
+                  delayMs(Blink_Delay);
+                  GPIO_PORTF_DATA_R = NO_COLOR;
+                  delayMs(Blink_Delay);
+                  break;
+
+          case 6: GPIO_PORTF_DATA_R = COLOR_MAGENTA_ON;
+                  delayMs(Blink_Delay);
+                  GPIO_PORTF_DATA_R = NO_COLOR;
+                  delayMs(Blink_Delay);
+                  break;
+
+          case 7: GPIO_PORTF_DATA_R = COLOR_WHITE_ON;
+                  delayMs(Blink_Delay);
+                  GPIO_PORTF_DATA_R = NO_COLOR;
+                  delayMs(Blink_Delay);
+                  break;
+
+         default: GPIO_PORTF_DATA_R = NO_COLOR;   // for debugging purposes
+                  break;
+
+     }
+    return;
+}
+
 int main()
 {
     // Necessary definitions to write data into Port F
+
     SYSCTL_RCGC2_R |=   0x00000020;   /* enable clock to GPIOF at clock gating control register */
     GPIO_PORTF_DIR_R =  0x0E;        /* enable the GPIO pins for the LED (PF3, 2 1) as output */
     GPIO_PORTF_LOCK_R = 0x4C4F434B;   /* unlock commit register GPIOCR */
@@ -59,7 +112,7 @@ int main()
     GPIO_PORTF_DEN_R =  0x1F;        // Enabling all the 5 pins of port 5 for digital activity
     GPIO_PORTF_PUR_R =  0x11;        /* enable pull up for pin 4 (SW1) and pin 0 (SW2). If this is not present, I think SW1 and SW2 are always considered to be pressed*///
 
-    int i = 0; // variable used for indexing purposes
+    int index = 0;                    // Variable used for indexing of the global character buffer array
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 
@@ -70,93 +123,46 @@ int main()
     UARTConfigSetExpClk(UART0_BASE, SysCtlClockGet(), 115200,(UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
     while(1)
     {
-        while(!(UARTCharsAvail(UART0_BASE)));
+        while(!(UARTCharsAvail(UART0_BASE)))
+          {
+            processColors();  // Retain the previous state when there is no new command
+          }
             val = UARTCharGet(UART0_BASE);
 
             // Check for Enter Character
             // If the received character is 0x0D => Enter key has been pressed
            if((val == 0x0D))
            {
-               // Enter key has been pressed. Process the contents of the data entered
-               while(!(UARTCharsAvail(UART0_BASE)))  // Keep repeating the following operating until no other key has been pressed
-                {
+                   // Enter key has been pressed. Process the contents of the data entered
                    if(strstr(console_cmd_buffer , "Color") || strstr(console_cmd_buffer , "Blink"))
                    {
                         if(strstr(console_cmd_buffer , "Color"))        Color      = findColor();                // Find out which color is requested
-                        else if(strstr(console_cmd_buffer , "Blink"))   Blink_Rate = findBlinkRate();            // Find out the blink rate
-                        switch(Color)
-                        {
-                            case 1: GPIO_PORTF_DATA_R = COLOR_GREEN_ON;
-                                    delayMs(Blink_Rate);
-                                    GPIO_PORTF_DATA_R = NO_COLOR;
-                                    delayMs(Blink_Rate);
-                                    break;
-
-                            case 2: GPIO_PORTF_DATA_R = COLOR_BLUE_ON;
-                                    delayMs(Blink_Rate);
-                                    GPIO_PORTF_DATA_R = NO_COLOR;
-                                    delayMs(Blink_Rate);
-                                    break;
-
-                            case 3: GPIO_PORTF_DATA_R = COLOR_CYAN_ON;
-                                    delayMs(Blink_Rate);
-                                    GPIO_PORTF_DATA_R = NO_COLOR;
-                                    delayMs(Blink_Rate);
-                                    break;
-
-                            case 4: GPIO_PORTF_DATA_R = COLOR_RED_ON;
-                                    delayMs(Blink_Rate);
-                                    GPIO_PORTF_DATA_R = NO_COLOR;
-                                    delayMs(Blink_Rate);
-                                    break;
-
-                            case 5: GPIO_PORTF_DATA_R = COLOR_YELLOW_ON;
-                                    delayMs(Blink_Rate);
-                                    GPIO_PORTF_DATA_R = NO_COLOR;
-                                    delayMs(Blink_Rate);
-                                    break;
-
-                            case 6: GPIO_PORTF_DATA_R = COLOR_MAGENTA_ON;
-                                    delayMs(Blink_Rate);
-                                    GPIO_PORTF_DATA_R = NO_COLOR;
-                                    delayMs(Blink_Rate);
-                                    break;
-
-                            case 7: GPIO_PORTF_DATA_R = COLOR_WHITE_ON;
-                                    delayMs(Blink_Rate);
-                                    GPIO_PORTF_DATA_R = NO_COLOR;
-                                    delayMs(Blink_Rate);
-                                    break;
-
-                            default: GPIO_PORTF_DATA_R = NO_COLOR;   // for debugging purposes
-                                     break;
-                        }
+                        else if(strstr(console_cmd_buffer , "Blink"))   Blink_Delay = findBlinkRate();            // Find out the blink rate
                    }
-                }
-               //console_cmd_buffer[0] = '\0';
+
            }
             // Support Back Space functionality
-           else if(val == 0x08 && i>0)
+           else if(val == 0x08 && index>0)
               {
                   UARTCharPut(UART0_BASE, '\b');   //Move the cursor back by one position to the left
                   UARTCharPut(UART0_BASE, ' ');    // Place a ' ' at the place where the character needs to be removed.
                                                    // Once ' ' is written, cursor will once again move by one position to the right. We need to move it back again.
                   UARTCharPut(UART0_BASE, '\b');   // Move the cursor back again.
-                  i = i-1;                         // Decrement the index as a character has been removed
-                  console_cmd_buffer[i] = '\0';    // Terminate the character array at the appropriate position
+                  index = index-1;                         // Decrement the index as a character has been removed
+                  console_cmd_buffer[index] = '\0';    // Terminate the character array at the appropriate position
+
               }
 
             // Process normal characters other than 'Enter' and 'BackSpace'
             else
             {
                 //UARTCharPut(UART0_BASE, val);  // Echo from the TIVA board back to the PC
-                if(i<=29) console_cmd_buffer[i] = val;
-                UARTCharPut(UART0_BASE, console_cmd_buffer[i]);
-                i = i+1;
-                if(i>=0 && i<=29)  console_cmd_buffer[i] = '\0'; // Terminate the array at a valid position
+                if(index<=29) console_cmd_buffer[index] = val;
+                UARTCharPut(UART0_BASE, console_cmd_buffer[index]);
+                index = index +1;
+                if(index>=0 && index<=29)  console_cmd_buffer[index] = '\0'; // Terminate the array at a valid position
             }
-
-
+           processColors();
     }
 
   return 0;
@@ -173,7 +179,7 @@ void delayMs(int n)
                 /* do nothing for 1 ms */
                 // check for key press periodically
             }
-      }
 
+      }
    return;  // sw1 not pressed during the entire duration of the delay
 }
