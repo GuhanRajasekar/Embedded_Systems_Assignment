@@ -19,7 +19,8 @@
 #define COLOR_WHITE_ON     0x0E  // B + R + G
 #define NO_COLOR           0x00  // No color
 
-void delayMs(int n);          // Software function to implement delay
+void delayMs(int n);           // Software function to implement delay
+void processInvalidCommand();  // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
 
 char console_cmd_buffer[30];  // global character array to store the echo the contents given by the user
 char val;                     // global character variable that is used across functions to read data from the console
@@ -29,26 +30,30 @@ int Blink_Delay = 1000;        // global integer to store the blink rate
 
 int findColor()               // Function to determine which color needs to be lit
 {
-   if(strstr(console_cmd_buffer ,"Color Green"))   return 1; //Green Color
-   if(strstr(console_cmd_buffer ,"Color Blue"))    return 2; //Blue Color
-   if(strstr(console_cmd_buffer ,"Color Cyan"))    return 3; //Cyan Color
-   if(strstr(console_cmd_buffer ,"Color Red"))     return 4; //Red Color
-   if(strstr(console_cmd_buffer ,"Color Yellow"))  return 5; //Yellow Color
-   if(strstr(console_cmd_buffer ,"Color Magenta")) return 6; //Magenta Color
-   if(strstr(console_cmd_buffer ,"Color White"))   return 7; //White Color
-   return -1;                            //Invalid Data Entered
+   if(strcmp(console_cmd_buffer ,"Color Green")== 0)    return 1; //Green Color
+   if(strcmp(console_cmd_buffer ,"Color Blue") == 0)    return 2; //Blue Color
+   if(strcmp(console_cmd_buffer ,"Color Cyan") == 0)    return 3; //Cyan Color
+   if(strcmp(console_cmd_buffer ,"Color Red") == 0)     return 4; //Red Color
+   if(strcmp(console_cmd_buffer ,"Color Yellow") == 0)  return 5; //Yellow Color
+   if(strcmp(console_cmd_buffer ,"Color Magenta") == 0) return 6; //Magenta Color
+   if(strcmp(console_cmd_buffer ,"Color White") == 0)   return 7; //White Color
+   processInvalidCommand();                                       // If none of the entered data is valid, give appropriate prompt to the user
+   return Color;                                                  //Invalid Data Entered (Simply return the current state of Color => Do not modify it)
 }
 
 int findBlinkRate()
 {
-    if     (strstr(console_cmd_buffer ,"Blink 16"))  return 61.25;
-    if(strstr(console_cmd_buffer ,"Blink 2"))        return 500;
-    if(strstr(console_cmd_buffer ,"Blink 4"))        return 250;
-    if(strstr(console_cmd_buffer ,"Blink 8"))        return 125;
-    if(strstr(console_cmd_buffer ,"Blink 1"))        return 1000;// Placing this here otherwise Blink 16 is not being detected as "Blink 1" is a substring of "Blink 16"
-    if(strstr(console_cmd_buffer ,"Blink 32"))       return 31.25;
-    return 1000;//1000; // Default value
+    if(strcmp(console_cmd_buffer ,"Blink 16") == 0)  return 61.25;
+    if(strcmp(console_cmd_buffer ,"Blink 2")  == 0)  return 500;
+    if(strcmp(console_cmd_buffer ,"Blink 4")  == 0)  return 250;
+    if(strcmp(console_cmd_buffer ,"Blink 8")  == 0)  return 125;
+    if(strcmp(console_cmd_buffer ,"Blink 1")  == 0)  return 1000;  // Placing this here otherwise Blink 16 is not being detected as "Blink 1" is a substring of "Blink 16"
+    if(strcmp(console_cmd_buffer ,"Blink 32") == 0)  return 31.25;
+    processInvalidCommand();  // If none of the entered data is valid, give appropriate prompt to the user
+    return Blink_Delay;       // Invalid Blink Command entered by the user => Retain the previous value of the blink rate
 }
+
+// Function to handle which Color must be blinking and at what rate the blink must be happening
 void processColors()
 {
     switch(Color)
@@ -102,15 +107,29 @@ void processColors()
     return;
 }
 
+// Function to empty the Character Buffer Array
+void emptyBuffer()
+{
+    console_cmd_buffer[0] = '\0';  // Setting the first character as a null character => Emptying the contents of the character buffer array
+    id = 0;                        // Setting the index of the character array as 0 as we need to start from the beginning
+}
 // Function to handle Enter Key presses
 void processEnterKey()
 {
     // Enter key has been pressed. Process the contents of the data entered
     if(strstr(console_cmd_buffer , "Color") || strstr(console_cmd_buffer , "Blink"))
     {
-         if(strstr(console_cmd_buffer , "Color"))        Color      = findColor();                // Find out which color is requested
+        // strstr() searches if the specified string is a subset of the contents of the character buffer array console_cmd_buffer
+         if(strstr(console_cmd_buffer , "Color"))        Color       = findColor();                // Find out which color is requested
          else if(strstr(console_cmd_buffer , "Blink"))   Blink_Delay = findBlinkRate();            // Find out the blink rate
     }
+    else processInvalidCommand(); // Command with neither Color nor Blink has been entered => Give appropriate prompt to user to enter valid command
+
+    /* Once Enter Key is pressed and Color and Blink Rate have been processed, empty the contents of the character array
+       to receive further instructions from the user */
+    emptyBuffer();
+    UARTCharPut(UART0_BASE, '\n'); // Once Enter key is pressed and the character buffer has been emptied, move on to the next line
+    UARTCharPut(UART0_BASE, '\r'); // After moving to the new line, also move to the extreme left end
 }
 
 // Function to handle BackSpace Key presses
@@ -132,6 +151,19 @@ void processNormalKey()
     UARTCharPut(UART0_BASE, console_cmd_buffer[id]);
     id = id +1;
     if(id>=0 && id<=29)  console_cmd_buffer[id] = '\0'; // Terminate the array at a valid position
+}
+
+// Functions to give directions to the user when an Invalid Command has been entered
+void processInvalidCommand()
+{
+    char* s  = "\n\n\rPlease enter any of the following commands:\n\r1).Color <Color_Name>\n\r2).Blink <Blink_Rate>\n\r";
+    int i = 0; // for indexing purposes
+    while(s[i] != '\0')
+    {
+        UARTCharPut(UART0_BASE, s[i]);
+        i = i+1;
+    }
+    return;
 }
 int main()
 {
