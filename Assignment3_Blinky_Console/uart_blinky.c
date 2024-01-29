@@ -8,6 +8,7 @@
 #include <driverlib/pin_map.h>
 #include <driverlib/sysctl.h>
 #include <driverlib/uart.h>
+#include <ctype.h>
 
 // Macros for the various colors
 #define COLOR_GREEN_ON     0x08
@@ -30,25 +31,25 @@ int Blink_Delay = 1000;        // global integer to store the blink rate
 
 int findColor()               // Function to determine which color needs to be lit
 {
-   if(strcmp(console_cmd_buffer ,"Color Green")== 0)    return 1; //Green Color
-   if(strcmp(console_cmd_buffer ,"Color Blue") == 0)    return 2; //Blue Color
-   if(strcmp(console_cmd_buffer ,"Color Cyan") == 0)    return 3; //Cyan Color
-   if(strcmp(console_cmd_buffer ,"Color Red") == 0)     return 4; //Red Color
-   if(strcmp(console_cmd_buffer ,"Color Yellow") == 0)  return 5; //Yellow Color
-   if(strcmp(console_cmd_buffer ,"Color Magenta") == 0) return 6; //Magenta Color
-   if(strcmp(console_cmd_buffer ,"Color White") == 0)   return 7; //White Color
+   if(strcmp(console_cmd_buffer ,"color green")== 0)    return 1; //Green Color
+   if(strcmp(console_cmd_buffer ,"color blue") == 0)    return 2; //Blue Color
+   if(strcmp(console_cmd_buffer ,"color cyan") == 0)    return 3; //Cyan Color
+   if(strcmp(console_cmd_buffer ,"color red") == 0)     return 4; //Red Color
+   if(strcmp(console_cmd_buffer ,"color yellow") == 0)  return 5; //Yellow Color
+   if(strcmp(console_cmd_buffer ,"color magenta") == 0) return 6; //Magenta Color
+   if(strcmp(console_cmd_buffer ,"color white") == 0)   return 7; //White Color
    processInvalidCommand();                                       // If none of the entered data is valid, give appropriate prompt to the user
    return Color;                                                  //Invalid Data Entered (Simply return the current state of Color => Do not modify it)
 }
 
 int findBlinkRate()
 {
-    if(strcmp(console_cmd_buffer ,"Blink 16") == 0)  return 61.25;
-    if(strcmp(console_cmd_buffer ,"Blink 2")  == 0)  return 500;
-    if(strcmp(console_cmd_buffer ,"Blink 4")  == 0)  return 250;
-    if(strcmp(console_cmd_buffer ,"Blink 8")  == 0)  return 125;
-    if(strcmp(console_cmd_buffer ,"Blink 1")  == 0)  return 1000;  // Placing this here otherwise Blink 16 is not being detected as "Blink 1" is a substring of "Blink 16"
-    if(strcmp(console_cmd_buffer ,"Blink 32") == 0)  return 31.25;
+    if(strcmp(console_cmd_buffer ,"blink 1") == 0)   return 1000;
+    if(strcmp(console_cmd_buffer ,"blink 2")  == 0)  return 500;
+    if(strcmp(console_cmd_buffer ,"blink 4")  == 0)  return 250;
+    if(strcmp(console_cmd_buffer ,"blink 8")  == 0)  return 125;
+    if(strcmp(console_cmd_buffer ,"blink 16")  == 0) return 61.25;
+    if(strcmp(console_cmd_buffer ,"blink 32") == 0)  return 31.25;
     processInvalidCommand();  // If none of the entered data is valid, give appropriate prompt to the user
     return Blink_Delay;       // Invalid Blink Command entered by the user => Retain the previous value of the blink rate
 }
@@ -117,11 +118,11 @@ void emptyBuffer()
 void processEnterKey()
 {
     // Enter key has been pressed. Process the contents of the data entered
-    if(strstr(console_cmd_buffer , "Color") || strstr(console_cmd_buffer , "Blink"))
+    if(strstr(console_cmd_buffer , "color") || strstr(console_cmd_buffer , "blink"))
     {
         // strstr() searches if the specified string is a subset of the contents of the character buffer array console_cmd_buffer
-         if(strstr(console_cmd_buffer , "Color"))        Color       = findColor();                // Find out which color is requested
-         else if(strstr(console_cmd_buffer , "Blink"))   Blink_Delay = findBlinkRate();            // Find out the blink rate
+         if(strstr(console_cmd_buffer , "color"))        Color       = findColor();                // Find out which color is requested
+         else if(strstr(console_cmd_buffer , "blink"))   Blink_Delay = findBlinkRate();            // Find out the blink rate
     }
     else processInvalidCommand(); // Command with neither Color nor Blink has been entered => Give appropriate prompt to user to enter valid command
 
@@ -147,8 +148,13 @@ void processBackSpaceKey()
 void processNormalKey()
 {
     //UARTCharPut(UART0_BASE, val);  // Echo from the TIVA board back to the PC
-    if(id<=29) console_cmd_buffer[id] = val;
-    UARTCharPut(UART0_BASE, console_cmd_buffer[id]);
+    /*
+       We DO NOT perform the lower case conversion here as the characters entered by
+       the users need to be printed without any modification
+     */
+    if(id<=29) console_cmd_buffer[id] = (val);
+    UARTCharPut(UART0_BASE, console_cmd_buffer[id]); // This makes the characters appear on the console (This is the Echo Operation)
+    console_cmd_buffer[id] = tolower(val);           // Convert everything to lower cases characters and store in the buffer array
     id = id +1;
     if(id>=0 && id<=29)  console_cmd_buffer[id] = '\0'; // Terminate the array at a valid position
 }
