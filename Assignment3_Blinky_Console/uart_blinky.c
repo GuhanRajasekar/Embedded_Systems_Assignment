@@ -24,8 +24,10 @@ void delayMs(int n);           // Software function to implement delay
 void processInvalidCommand();  // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
 void read_sw1();               // Function to handle sw1 press
 void read_sw2();               // Function to handle sw2 press
+void removeWhiteSpaces();      // Function to remove all the white spaces (space and tabs) entered in the command by the user
 
-char console_cmd_buffer[30];   // global character array to store the echo the contents given by the user
+char console_cmd_buffer[30];   // global character array to store the contents given by the user
+char console_cmd_buffer2[30];  // global character array to store the contents given by the user without the spaces and the tabs
 char val;                      // global character variable that is used across functions to read data from the console
 int id = 0;                    // global variable to take care of indexing of the character buffer array
 int Color = 0;                 // global variable to denote which color is currently active ( 0 indicates no color )
@@ -34,15 +36,31 @@ int sw1_pressed = 0;           // flag to indicate if sw1 has been pressed
 int sw2_pressed = 0;           // flag to indicate if sw2 has been pressed
 int count_sw2 = 0;             // to keep track of the number of times SW2 was pressed
 
+// Function to remove all the white spaces (space and tabs) entered in the command by the user
+void removeWhiteSpaces()
+{
+    int i = 0,k=0;
+    while(console_cmd_buffer[i] != '\0')
+    {
+        if(!isspace(console_cmd_buffer[i]))
+            {
+               console_cmd_buffer2[k] = console_cmd_buffer[i];
+               k = k + 1;
+            }
+        i = i+1;
+    }
+    console_cmd_buffer2[k] = '\0'; // Null terminate the new array
+}
+
 int findColor()               // Function to determine which color needs to be lit
 {
-   if(strcmp(console_cmd_buffer ,"color green")== 0)    return 1; //Green Color
-   if(strcmp(console_cmd_buffer ,"color blue") == 0)    return 2; //Blue Color
-   if(strcmp(console_cmd_buffer ,"color cyan") == 0)    return 3; //Cyan Color
-   if(strcmp(console_cmd_buffer ,"color red") == 0)     return 4; //Red Color
-   if(strcmp(console_cmd_buffer ,"color yellow") == 0)  return 5; //Yellow Color
-   if(strcmp(console_cmd_buffer ,"color magenta") == 0) return 6; //Magenta Color
-   if(strcmp(console_cmd_buffer ,"color white") == 0)   return 7; //White Color
+   if(strcmp(console_cmd_buffer2 ,"colorgreen")== 0)    return 1; //Green Color
+   if(strcmp(console_cmd_buffer2 ,"colorblue") == 0)    return 2; //Blue Color
+   if(strcmp(console_cmd_buffer2 ,"colorcyan") == 0)    return 3; //Cyan Color
+   if(strcmp(console_cmd_buffer2 ,"colorred") == 0)     return 4; //Red Color
+   if(strcmp(console_cmd_buffer2 ,"coloryellow") == 0)  return 5; //Yellow Color
+   if(strcmp(console_cmd_buffer2 ,"colormagenta") == 0) return 6; //Magenta Color
+   if(strcmp(console_cmd_buffer2 ,"colorwhite") == 0)   return 7; //White Color
    processInvalidCommand();                                       // If none of the entered data is valid, give appropriate prompt to the user
    return Color;                                                  //Invalid Data Entered (Simply return the current state of Color => Do not modify it)
 }
@@ -55,12 +73,12 @@ int findBlinkRate()
        For example if user gives the command Blink 8 , the next time switch 2 is pressed, it must be go to Blink 16.
        For that to happen, we need to modify count_sw2 variable which will be used in the switch case statements in the read_sw2() function.
      */
-    if(strcmp(console_cmd_buffer ,"blink 1") == 0)   { count_sw2 = 6; return 1000;}
-    if(strcmp(console_cmd_buffer ,"blink 2")  == 0)  { count_sw2 = 1; return 250;}
-    if(strcmp(console_cmd_buffer ,"blink 4")  == 0)  { count_sw2 = 2; return 125;}
-    if(strcmp(console_cmd_buffer ,"blink 8")  == 0)  { count_sw2 = 3; return 61.25;}
-    if(strcmp(console_cmd_buffer ,"blink 16")  == 0) { count_sw2 = 4; return 31.25;}
-    if(strcmp(console_cmd_buffer ,"blink 32") == 0)  { count_sw2 = 5; return 15.625;}
+    if(strcmp(console_cmd_buffer2 ,"blink1") == 0)   { count_sw2 = 6; return 1000;}
+    if(strcmp(console_cmd_buffer2 ,"blink2")  == 0)  { count_sw2 = 1; return 250;}
+    if(strcmp(console_cmd_buffer2 ,"blink4")  == 0)  { count_sw2 = 2; return 125;}
+    if(strcmp(console_cmd_buffer2 ,"blink8")  == 0)  { count_sw2 = 3; return 61.25;}
+    if(strcmp(console_cmd_buffer2 ,"blink16")  == 0) { count_sw2 = 4; return 31.25;}
+    if(strcmp(console_cmd_buffer2 ,"blink32") == 0)  { count_sw2 = 5; return 15.625;}
     processInvalidCommand();  // If none of the entered data is valid, give appropriate prompt to the user
     return Blink_Delay;       // Invalid Blink Command entered by the user => Retain the previous value of the blink rate
 }
@@ -184,19 +202,21 @@ void processColors()
 // Function to empty the Character Buffer Array
 void emptyBuffer()
 {
-    console_cmd_buffer[0] = '\0';  // Setting the first character as a null character => Emptying the contents of the character buffer array
-    id = 0;                        // Setting the index of the character array as 0 as we need to start from the beginning
+    console_cmd_buffer[0]  = '\0';  // Setting the first character as a null character => Emptying the contents of the character buffer array
+    console_cmd_buffer2[0] = '\0';  // Setting the first character as a null character => Emptying the contents of the character buffer array
+    id = 0;                         // Setting the index of the character array as 0 as we need to start from the beginning
 }
 
 // Function to handle Enter Key presses
 void processEnterKey()
 {
+    removeWhiteSpaces(); // Copy all the contents from console_cmd_buffer to console_cmd_buffer2 except the whitespaces ( spaces and tabs)
     // Enter key has been pressed. Process the contents of the data entered
-    if(strstr(console_cmd_buffer , "color") || strstr(console_cmd_buffer , "blink"))
+    if(strstr(console_cmd_buffer2 , "color") || strstr(console_cmd_buffer2 , "blink"))
     {
         // strstr() searches if the specified string is a subset of the contents of the character buffer array console_cmd_buffer
-         if(strstr(console_cmd_buffer , "color"))        Color       = findColor();                // Find out which color is requested
-         else if(strstr(console_cmd_buffer , "blink"))   Blink_Delay = findBlinkRate();            // Find out the blink rate
+         if(strstr(console_cmd_buffer2 , "color"))        Color       = findColor();                // Find out which color is requested
+         else if(strstr(console_cmd_buffer2 , "blink"))   Blink_Delay = findBlinkRate();            // Find out the blink rate
     }
     else processInvalidCommand(); // Command with neither Color nor Blink has been entered => Give appropriate prompt to user to enter valid command
 
@@ -237,7 +257,7 @@ void processNormalKey()
 // Functions to give directions to the user when an Invalid Command has been entered
 void processInvalidCommand()
 {
-    char* s  = "\n\n\rPlease enter any of the following commands:\n\r1).Color <Color_Name>\n\r2).Blink <Blink_Rate>\n\r";
+    char* s  = "\n\n\rPlease enter any of the following commands:\n\r1).Color <Color_Name>\n\r2).Blink <Blink_Rate>\n\rValid numbers to be entered after 'blink' are 1,2,4,8,16,32\n\n\r";
     int i = 0; // for indexing purposes
     while(s[i] != '\0')
     {
