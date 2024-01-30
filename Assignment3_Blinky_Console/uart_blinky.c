@@ -22,12 +22,14 @@
 
 void delayMs(int n);           // Software function to implement delay
 void processInvalidCommand();  // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
+void read_sw1();               // Function to handle sw1 press
 
-char console_cmd_buffer[30];  // global character array to store the echo the contents given by the user
-char val;                     // global character variable that is used across functions to read data from the console
-int id = 0;                // global variable to take care of indexing of the character buffer array
-int Color = -1;               // global variable to denote which color is currently active
+char console_cmd_buffer[30];   // global character array to store the echo the contents given by the user
+char val;                      // global character variable that is used across functions to read data from the console
+int id = 0;                    // global variable to take care of indexing of the character buffer array
+int Color = 0;                 // global variable to denote which color is currently active ( 0 indicates no color )
 int Blink_Delay = 1000;        // global integer to store the blink rate
+int sw1_pressed = 0;           // flag to indicate if sw1 has been pressed
 
 int findColor()               // Function to determine which color needs to be lit
 {
@@ -52,6 +54,28 @@ int findBlinkRate()
     if(strcmp(console_cmd_buffer ,"blink 32") == 0)  return 31.25;
     processInvalidCommand();  // If none of the entered data is valid, give appropriate prompt to the user
     return Blink_Delay;       // Invalid Blink Command entered by the user => Retain the previous value of the blink rate
+}
+
+// Function to take care of sw1 press
+void read_sw1()
+{
+    sw1_pressed = 0;
+    int current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;      // read the status of sw1
+    if((current_state_sw1) == 0x00)
+    {
+        while(current_state_sw1 == 0x00)
+        {
+            current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;  // read the data from sw1 again
+            if(current_state_sw1 == 0x10)
+            {
+                sw1_pressed = 1;                           // consider sw1 to be pressed
+                Color = Color + 1;
+                if(Color == 8) Color = 1;
+                break;
+            }
+        }
+    }
+    return;
 }
 
 // Function to handle which Color must be blinking and at what rate the blink must be happening
@@ -159,6 +183,7 @@ void processNormalKey()
     if(id>=0 && id<=29)  console_cmd_buffer[id] = '\0'; // Terminate the array at a valid position
 }
 
+
 // Functions to give directions to the user when an Invalid Command has been entered
 void processInvalidCommand()
 {
@@ -194,12 +219,14 @@ int main()
     {
         while(!(UARTCharsAvail(UART0_BASE)))
           {
+            read_sw1();       // Check for sw1 press even when the user has not given any new command
             processColors();  // Maintain LED Blink state even when there is no new command
           }
         val = UARTCharGet(UART0_BASE);
         if((val == 0x0D))                 processEnterKey();         // If entered character is 0x0D => Enter key has been pressed
         else if(val == 0x08 && id>0)      processBackSpaceKey();     // If entered character is 0x08 => Back Space Key has been pressed
         else                              processNormalKey();        // To process Key press that is Neither "Enter" nor "Back Space"
+        read_sw1();                                                  // Keep checking for sw1 press
         processColors();                                             // Maintain LED blink state even in the middle of a new command
     }
 
@@ -226,6 +253,8 @@ void delayMs(int n)
            else if(val == 0x08 && id>0)      processBackSpaceKey();     // If entered character is 0x08 => Back Space Key has been pressed
            else                              processNormalKey();        // To process Key press that is Neither "Enter" nor "Back Space"
        }
+       read_sw1();                                                      // Check the status of sw1 periodically
+
       }
    return;  // sw1 not pressed during the entire duration of the delay
 }
