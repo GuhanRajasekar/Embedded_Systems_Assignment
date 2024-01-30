@@ -23,6 +23,7 @@
 void delayMs(int n);           // Software function to implement delay
 void processInvalidCommand();  // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
 void read_sw1();               // Function to handle sw1 press
+void read_sw2();               // Function to handle sw2 press
 
 char console_cmd_buffer[30];   // global character array to store the echo the contents given by the user
 char val;                      // global character variable that is used across functions to read data from the console
@@ -30,6 +31,8 @@ int id = 0;                    // global variable to take care of indexing of th
 int Color = 0;                 // global variable to denote which color is currently active ( 0 indicates no color )
 int Blink_Delay = 1000;        // global integer to store the blink rate
 int sw1_pressed = 0;           // flag to indicate if sw1 has been pressed
+int sw2_pressed = 0;           // flag to indicate if sw2 has been pressed
+int count_sw2 = 0;             // to keep track of the number of times SW2 was pressed
 
 int findColor()               // Function to determine which color needs to be lit
 {
@@ -46,12 +49,18 @@ int findColor()               // Function to determine which color needs to be l
 
 int findBlinkRate()
 {
-    if(strcmp(console_cmd_buffer ,"blink 1") == 0)   return 1000;
-    if(strcmp(console_cmd_buffer ,"blink 2")  == 0)  return 500;
-    if(strcmp(console_cmd_buffer ,"blink 4")  == 0)  return 250;
-    if(strcmp(console_cmd_buffer ,"blink 8")  == 0)  return 125;
-    if(strcmp(console_cmd_buffer ,"blink 16")  == 0) return 61.25;
-    if(strcmp(console_cmd_buffer ,"blink 32") == 0)  return 31.25;
+    /*
+       Although this function is not called for sw2 press, we still modify count_sw2 value here.
+       This ensures continuity in the various blink rates as mentioned by the user in the console and through sw2 press
+       For example if user gives the command Blink 8 , the next time switch 2 is pressed, it must be go to Blink 16.
+       For that to happen, we need to modify count_sw2 variable which will be used in the switch case statements in the read_sw2() function.
+     */
+    if(strcmp(console_cmd_buffer ,"blink 1") == 0)   { count_sw2 = 6; return 1000;}
+    if(strcmp(console_cmd_buffer ,"blink 2")  == 0)  { count_sw2 = 1; return 250;}
+    if(strcmp(console_cmd_buffer ,"blink 4")  == 0)  { count_sw2 = 2; return 125;}
+    if(strcmp(console_cmd_buffer ,"blink 8")  == 0)  { count_sw2 = 3; return 61.25;}
+    if(strcmp(console_cmd_buffer ,"blink 16")  == 0) { count_sw2 = 4; return 31.25;}
+    if(strcmp(console_cmd_buffer ,"blink 32") == 0)  { count_sw2 = 5; return 15.625;}
     processInvalidCommand();  // If none of the entered data is valid, give appropriate prompt to the user
     return Blink_Delay;       // Invalid Blink Command entered by the user => Retain the previous value of the blink rate
 }
@@ -72,6 +81,46 @@ void read_sw1()
                 Color = Color + 1;
                 if(Color == 8) Color = 1;
                 break;
+            }
+        }
+    }
+    return;
+}
+
+void read_sw2()
+{
+    int current_state_sw2 = GPIO_PORTF_DATA_R & 0x01;   // read the status of sw2
+    sw2_pressed = 0;
+    if(current_state_sw2 == 0x00)
+    {
+        while(current_state_sw2 == 0x00)
+        {
+            current_state_sw2 = GPIO_PORTF_DATA_R & 0x01;  // read the data from sw2 again
+            if(current_state_sw2 == 0x01)                     // If value is still 0, consider sw2 to be pressed.
+            {
+                sw2_pressed = 1;                           // consider sw2 to be pressed
+                count_sw2 = count_sw2 + 1;                 // increment the count value of sw2 press to increase the blink speed of the LED
+                if(count_sw2 == 7) count_sw2 = 1;
+                switch(count_sw2)
+                {
+                   case 1: Blink_Delay = 250;    // blink 2 times in two seconds  => blink once in 1 second
+                           break;
+
+                   case 2: Blink_Delay = 125;    // blink 4 times in two seconds  => blink 2 times in 1 second
+                           break;
+
+                   case 3: Blink_Delay = 62.5;   // blink 8 times in two seconds  => blink 4 times in 1 second
+                           break;
+
+                   case 4: Blink_Delay = 31.25;  // blink 16 times in two seconds => blink 8 times in 1 second
+                           break;
+
+                   case 5: Blink_Delay = 15.625;  // blink 32 times in two seconds => blink 16 times in one second => MAX SPEED (LED Constantly On)
+                           break;
+
+                   case 6: Blink_Delay = 1000;   // After max speed switch back to blinking once in 2 seconds  (This is the lowest speed)
+                           break;
+                }
             }
         }
     }
@@ -138,6 +187,7 @@ void emptyBuffer()
     console_cmd_buffer[0] = '\0';  // Setting the first character as a null character => Emptying the contents of the character buffer array
     id = 0;                        // Setting the index of the character array as 0 as we need to start from the beginning
 }
+
 // Function to handle Enter Key presses
 void processEnterKey()
 {
@@ -220,6 +270,7 @@ int main()
         while(!(UARTCharsAvail(UART0_BASE)))
           {
             read_sw1();       // Check for sw1 press even when the user has not given any new command
+            read_sw2();       // Check for sw2 press even when the user has not given any new command
             processColors();  // Maintain LED Blink state even when there is no new command
           }
         val = UARTCharGet(UART0_BASE);
@@ -227,6 +278,7 @@ int main()
         else if(val == 0x08 && id>0)      processBackSpaceKey();     // If entered character is 0x08 => Back Space Key has been pressed
         else                              processNormalKey();        // To process Key press that is Neither "Enter" nor "Back Space"
         read_sw1();                                                  // Keep checking for sw1 press
+        read_sw2();                                                  // Keep checking for sw2 press
         processColors();                                             // Maintain LED blink state even in the middle of a new command
     }
 
@@ -254,7 +306,7 @@ void delayMs(int n)
            else                              processNormalKey();        // To process Key press that is Neither "Enter" nor "Back Space"
        }
        read_sw1();                                                      // Check the status of sw1 periodically
-
+       read_sw2();                                                      // Check the status of sw2 periodically
       }
    return;  // sw1 not pressed during the entire duration of the delay
 }
