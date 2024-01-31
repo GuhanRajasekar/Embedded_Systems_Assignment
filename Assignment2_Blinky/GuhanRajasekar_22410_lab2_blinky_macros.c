@@ -1,3 +1,5 @@
+// Guhan Rajasekar MTech ESE (2023 -2025)
+// Solution for lab 2 assignment : Blinky and Macros
 #include <stdint.h>
 #include "inc/tm4c123gh6pm.h"
 // Green, Blue, Cyan, Red, Yellow, Magenta, White
