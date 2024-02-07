@@ -1,3 +1,6 @@
+// Author: Guhan Rajasekar (Mtech ESE, 22410)
+// This code is submission for Assignment 3 of Embedded Systems Lab
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
