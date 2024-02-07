@@ -1,6 +1,3 @@
-// Author : Guhan Rajasekar , Mtech ESE (2023 - 2025)
-// This code is submission for Assignment 4 of Embedded Systems Lab
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -28,10 +25,8 @@ void processInvalidCommand();  // Forward Declaration of the function that gives
 void read_sw1();               // Function to handle sw1 press
 void read_sw2();               // Function to handle sw2 press
 void removeWhiteSpaces();      // Function to remove all the white spaces (space and tabs) entered in the command by the user
-void StopCommand();            // Function to handle Stop Command
-void StartCommand();           // Function to handle Start Command
-void PauseCommand();           // Function to process Pause Command
-void ResumeCommand();          // Function to process Resume Command
+void StartStopCommand();       // Function to handle Stop Command
+void ResumePauseCommand();     // Function to handle Start Command
 
 char console_cmd_buffer[30];   // global character array to store the contents given by the user
 char console_cmd_buffer2[30];  // global character array to store the contents given by the user without the spaces and the tabs
@@ -218,33 +213,32 @@ void emptyBuffer()
     id = 0;                         // Setting the index of the character array as 0 as we need to start from the beginning
 }
 
-// Function to handle Stop Command
-void StopCommand()
+// Function to handle Start and Stop Commands
+void StartStopCommand()
 {
-    if(strcmp(console_cmd_buffer2 , "stop") == 0)
-        {
-            Color = 0;      // Stop blinking if command is stop
-            stop_flag = 1;  // to indicate stop flag has been pressed
-        }
-    return;
+    if(strcmp(console_cmd_buffer,"start") == 0)
+    {
+        Color = 1;              // Set color to green
+        Blink_Delay = 1000;     // Set delay to the least value
+        stop_flag = 0;          // 0 indicates that the stop feature is not active
+        return;
+    }
+    else if(strcmp(console_cmd_buffer,"stop") == 0)
+    {
+        Color = 0;       // Set Color to No Color
+        stop_flag = 1;   // 1 indicates that stop feature is active
+        return;
+    }
+    else return;
 }
 
-// Function to handle Start Command
-void StartCommand()
+// Function to handle Resume and Pause Commands
+void ResumePauseCommand()
 {
-    if(strcmp(console_cmd_buffer2 , "start") == 0)
-        {
-            Color = 1;                 // Set Color to Green
-            Blink_Delay = 1000;        // Lowest Delay
-            stop_flag = 0;             // to indicate stop condition is now inactive
-        }
-    return;
-}
-
-// Function to handle Pause Command
-void PauseCommand()
-{
-    if(strcmp(console_cmd_buffer2, "pause") == 0)
+    /* Here the pause_flag == 0 check will make sure that in the case of user entering multiple
+       pause commands continuously, only the first pause command is considered
+    */
+    if((strcmp(console_cmd_buffer2, "pause") == 0) && (pause_flag == 0))
     {
        // Save the Color and Blink Delay before going into pause state
        // Once state of the color is saved , set color to No color
@@ -252,21 +246,18 @@ void PauseCommand()
        Color_Pause = Color;
        Blink_Delay_Pause = Blink_Delay;
        Color = 0;
+       return;
     }
-    return;
+    else if(strcmp(console_cmd_buffer2 , "resume") == 0)
+    {
+        pause_flag = 0;
+        Color = Color_Pause;
+        Blink_Delay = Blink_Delay_Pause;
+        return;
+    }
+    else return;
 }
 
-// Function to handle Resume Command
-void ResumeCommand()
-{
-    if(strcmp(console_cmd_buffer2,"resume") == 0)
-        {
-           pause_flag = 0;                     // 0 indicates that the pause state is now disabled
-           Color = Color_Pause;                // retain the old color value that the system had before going to pause state
-           Blink_Delay = Blink_Delay_Pause;    // retain the old blink rate  that the system had before going to pause state
-        }
-    return;
-}
 
 // Function to handle Enter Key presses
 void processEnterKey()
@@ -277,10 +268,10 @@ void processEnterKey()
     // strstr() searches if the specified string is a subset of the contents of the character buffer array console_cmd_buffer
     if     ( (strstr(console_cmd_buffer2, "color" )) && (stop_flag == 0) && (pause_flag == 0))  Color       = findColor();      // Find out which color is requested
     else if( (strstr(console_cmd_buffer2, "blink" )) && (stop_flag == 0) && (pause_flag == 0))  Blink_Delay = findBlinkRate();  // Find out the blink rate
-    else if( (strstr(console_cmd_buffer2, "pause" )) && (stop_flag == 0))  PauseCommand();  // Process Pause Command
-    else if( (strstr(console_cmd_buffer2, "resume")) && (stop_flag == 0))  ResumeCommand(); // Process Resume Command
-    else if(strstr(console_cmd_buffer2, "stop"))     StopCommand();   // Process Stop Command
-    else if(strstr(console_cmd_buffer2, "start"))    StartCommand();  // Process Start Command
+    else if( (strstr(console_cmd_buffer2, "pause" )) && (stop_flag == 0))  ResumePauseCommand();  // Process Pause Command
+    else if( (strstr(console_cmd_buffer2, "resume")) && (stop_flag == 0))  ResumePauseCommand(); // Process Resume Command
+    else if(strstr(console_cmd_buffer2, "stop"))     StartStopCommand();   // Process Stop Command
+    else if(strstr(console_cmd_buffer2, "start"))    StartStopCommand();   // Process Start Command
     else processInvalidCommand(); // Command with neither Color nor Blink has been entered => Give appropriate prompt to user to enter valid command
 
     /* Once Enter Key is pressed and Color and Blink Rate have been processed, empty the contents of the character array
@@ -335,8 +326,9 @@ void processInvalidCommand()
 }
 int main()
 {
-    // Necessary definitions to write data into Port F
+//    keypad_init(); // To initialize keypad
 
+    // Necessary definitions to write data into Port F
     SYSCTL_RCGC2_R |=   0x00000020;   /* enable clock to GPIOF at clock gating control register */
     GPIO_PORTF_DIR_R =  0x0E;        /* enable the GPIO pins for the LED (PF3, 2 1) as output */
     GPIO_PORTF_LOCK_R = 0x4C4F434B;   /* unlock commit register GPIOCR */
@@ -392,6 +384,7 @@ void delayMs(int n)
            else if(val == 0x08 && id>0)      processBackSpaceKey();     // If entered character is 0x08 => Back Space Key has been pressed
            else                              processNormalKey();        // To process Key press that is Neither "Enter" nor "Back Space"
        }
+//       if(readkey() == 1) Color = 2;
        read_sw1();                                                      // Check the status of sw1 periodically
        read_sw2();                                                      // Check the status of sw2 periodically
       }
