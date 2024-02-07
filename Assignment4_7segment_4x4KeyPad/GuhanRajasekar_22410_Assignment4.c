@@ -20,13 +20,17 @@
 #define COLOR_WHITE_ON     0x0E  // B + R + G
 #define NO_COLOR           0x00  // No color
 
+void GPIOE_INIT();             // Function to Initialize Port E of TIVA
+void GPIOC_INIT();             // Function to Initialize Port C of TIVA
 void delayMs(int n);           // Software function to implement delay
 void processInvalidCommand();  // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
 void read_sw1();               // Function to handle sw1 press
 void read_sw2();               // Function to handle sw2 press
 void removeWhiteSpaces();      // Function to remove all the white spaces (space and tabs) entered in the command by the user
-void StartStopCommand();       // Function to handle Stop Command
-void ResumePauseCommand();     // Function to handle Start Command
+void StartStopCommand();       // Function to handle Start and Stop Commands
+void ResumePauseCommand();     // Function to handle Resume and Pause Commands
+void delay_1_Ms();             // Function to add a delay of 1ms
+void ProcessKeyPress();        // Function to check if any one of the keys in the 4x4 keypad was pressed
 
 char console_cmd_buffer[30];   // global character array to store the contents given by the user
 char console_cmd_buffer2[30];  // global character array to store the contents given by the user without the spaces and the tabs
@@ -39,9 +43,33 @@ int Blink_Delay_Pause = 1000;  // global variable to save the blink delay before
 int sw1_pressed = 0;           // flag to indicate if sw1 has been pressed
 int sw2_pressed = 0;           // flag to indicate if sw2 has been pressed
 int count_sw2 = 0;             // to keep track of the number of times SW2 was pressed
-int stop_flag = 0;             // 0 / 1 => Stop Command is inactive / active
-int pause_flag = 0;            // 0 / 1 => Pause Command is inactive / active
+int stop_flag =  0;             // 0 / 1 => Stop Command is  inactive / active
+int pause_flag = 0;            //  0 / 1 => Pause Command is inactive / active
+int num = 0;                   // This variable is used in ProcessKeyPress() function
+int key = 0;                   // 0 / 1 / 2 => No Key Press / 1st Switch Pressed / 2nd Switch Pressed in 4x4 keyboard
 
+
+// Function to Initialize PortE of TIVA
+void GPIOE_INIT()
+{
+    SYSCTL_RCGC2_R    |= 0x00000010 ;       /* Enable clock to GPIO_E_ at clock gating control register */
+    SYSCTL_RCGCGPIO_R |= 0x00000010 ;       /* Enable and provide a clock to GPIO Port_E_ in Run mode */
+    GPIO_PORTE_DIR_R  |= 0x0F ;             /*  GPIO Direction | 0 -> INPUT | 1 -> OUTPUT  (We are configuring PORTE as output and connecting it to rows of 4x4 Keypad)*/
+    GPIO_PORTE_DEN_R  |= 0x0F;              /* enable the GPIO pins for digital function */
+    GPIO_PORTE_DATA_R  = 0x00 ;             /* Initializing PORTE Data to all 0s*/
+    return;
+}
+
+//Function to Initialize PortC of TIVA
+void GPIOC_INIT()
+{
+    SYSCTL_RCGC2_R    |= 0x00000004 ;       /* Enable clock to GPIO_C_ at clock gating control register */
+    SYSCTL_RCGCGPIO_R |= 0x00000004 ;       /* Enable and provide a clock to GPIO Port_C_ in Run mode */
+    GPIO_PORTC_DIR_R  &= ~ 0xF0 ;           /*  GPIO Direction | 0 -> INPUT | 1 -> OUTPUT (We are configuring PORTC as input and connecting it to columns of 4x4 Keypad)*/
+    GPIO_PORTC_ODR_R |= 0xF0 ;              /* 1 -> The corresponding pin is configured as open drain */
+    GPIO_PORTC_DEN_R |= 0xF0;               /* enable the GPIO pins for digital function */
+    GPIO_PORTC_PUR_R |= 0xF0 ;              /* 1 -> The corresponding pin's weak pull-up resistor is enabled */
+}
 // Function to remove all the white spaces (space and tabs) entered in the command by the user
 void removeWhiteSpaces()
 {
@@ -151,6 +179,36 @@ void read_sw2()
     return;
 }
 
+
+// Function to check if first or the second key of the 4x4 Keypad was done
+void ProcessKeyPress()
+{
+    key = 0;
+    int row = 0, col = 0;
+    for(row = 0; row < 2; row ++)
+    {
+        GPIO_PORTE_DATA_R = ( 0x0F & ~(1 << row) );
+
+        num = GPIO_PORTC_DATA_R & 0xF0 ;
+
+        if( num != 0x0F)
+        {
+            if( num == 0xE0)
+            {
+                col = 1;
+                key =  ( (row * 4) + col );
+            }
+            else if( num == 0xD0)
+            {
+                col = 2;
+                key = ( (row * 4) + col );
+            }
+        }
+
+    }
+    return ;
+}
+
 // Function to handle which Color must be blinking and at what rate the blink must be happening
 void processColors()
 {
@@ -216,14 +274,18 @@ void emptyBuffer()
 // Function to handle Start and Stop Commands
 void StartStopCommand()
 {
-    if(strcmp(console_cmd_buffer,"start") == 0)
+    if (    (strcmp(console_cmd_buffer,"start") == 0)
+         || (key == 1)
+       )
     {
         Color = 1;              // Set color to green
         Blink_Delay = 1000;     // Set delay to the least value
         stop_flag = 0;          // 0 indicates that the stop feature is not active
         return;
     }
-    else if(strcmp(console_cmd_buffer,"stop") == 0)
+    else if (   (strcmp(console_cmd_buffer,"stop") == 0)
+             || (key == 1)
+            )
     {
         Color = 0;       // Set Color to No Color
         stop_flag = 1;   // 1 indicates that stop feature is active
@@ -238,7 +300,9 @@ void ResumePauseCommand()
     /* Here the pause_flag == 0 check will make sure that in the case of user entering multiple
        pause commands continuously, only the first pause command is considered
     */
-    if((strcmp(console_cmd_buffer2, "pause") == 0) && (pause_flag == 0))
+    if(    ( (strcmp(console_cmd_buffer2, "pause") == 0)  || (key == 2))
+        && (pause_flag == 0)
+      )
     {
        // Save the Color and Blink Delay before going into pause state
        // Once state of the color is saved , set color to No color
@@ -248,7 +312,7 @@ void ResumePauseCommand()
        Color = 0;
        return;
     }
-    else if(strcmp(console_cmd_buffer2 , "resume") == 0)
+    else if( (strcmp(console_cmd_buffer2 , "resume") == 0) || (key == 2) )
     {
         pause_flag = 0;
         Color = Color_Pause;
@@ -336,6 +400,10 @@ int main()
     GPIO_PORTF_DEN_R =  0x1F;        // Enabling all the 5 pins of port 5 for digital activity
     GPIO_PORTF_PUR_R =  0x11;        /* enable pull up for pin 4 (SW1) and pin 0 (SW2). If this is not present, I think SW1 and SW2 are always considered to be pressed*///
 
+    // Initialize Port E and Port C as they will be connected to rows and columns of the 4x4 keypad respectively
+    GPIOE_INIT();                    /* Initialize Port E*/
+    GPIOC_INIT();                    /* Initialize Port C*/
+
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 
@@ -351,14 +419,20 @@ int main()
             read_sw1();       // Check for sw1 press even when the user has not given any new command
             read_sw2();       // Check for sw2 press even when the user has not given any new command
             processColors();  // Maintain LED Blink state even when there is no new command
+            ProcessKeyPress();                                           // Check if key 1 or key 2 of the 4x4 keypad was pressed
+            if  (key == 1)                      StartStopCommand();      // If key 1 is pressed in 4x4 keypad, process Start and Stop Commands
+//            if( (key == 2) && (stop_flag == 0)) ResumePauseCommand();    // If key 2 is pressed in 4x4 keypad, process Resume and Pause Commands
           }
         val = UARTCharGet(UART0_BASE);
-        if((val == 0x0D))                 processEnterKey();         // If entered character is 0x0D => Enter key has been pressed
-        else if(val == 0x08 && id>0)      processBackSpaceKey();     // If entered character is 0x08 => Back Space Key has been pressed
-        else                              processNormalKey();        // To process Key press that is Neither "Enter" nor "Back Space"
-        read_sw1();                                                  // Keep checking for sw1 press
-        read_sw2();                                                  // Keep checking for sw2 press
-        processColors();                                             // Maintain LED blink state even in the middle of a new command
+        if((val == 0x0D))                 processEnterKey();                    // If entered character is 0x0D => Enter key has been pressed
+        else if(val == 0x08 && id>0)      processBackSpaceKey();                // If entered character is 0x08 => Back Space Key has been pressed
+        else                              processNormalKey();                   // To process Key press that is Neither "Enter" nor "Back Space"
+        read_sw1();                                                             // Keep checking for sw1 press
+        read_sw2();                                                             // Keep checking for sw2 press
+        processColors();                                                        // Maintain LED blink state even in the middle of a new command
+        ProcessKeyPress();                                                      // Check if key 1 or key 2 of the 4x4 keypad was pressed
+        if  (key == 1)                      StartStopCommand();                 // If key 1 is pressed in 4x4 keypad, process Start and Stop Commands
+//        if( (key == 2) && (stop_flag == 0)) ResumePauseCommand();               // If key 2 is pressed in 4x4 keypad, process Resume and Pause Commands
     }
 
   return 0;
@@ -380,13 +454,16 @@ void delayMs(int n)
        if(UARTCharsAvail(UART0_BASE))
        {
            val = UARTCharGet(UART0_BASE);
-           if((val == 0x0D))                 processEnterKey();         // If entered character is 0x0D => Enter key has been pressed
-           else if(val == 0x08 && id>0)      processBackSpaceKey();     // If entered character is 0x08 => Back Space Key has been pressed
-           else                              processNormalKey();        // To process Key press that is Neither "Enter" nor "Back Space"
+           if((val == 0x0D))                 processEnterKey();                // If entered character is 0x0D => Enter key has been pressed
+           else if(val == 0x08 && id>0)      processBackSpaceKey();            // If entered character is 0x08 => Back Space Key has been pressed
+           else                              processNormalKey();               // To process Key press that is Neither "Enter" nor "Back Space"
        }
-//       if(readkey() == 1) Color = 2;
-       read_sw1();                                                      // Check the status of sw1 periodically
-       read_sw2();                                                      // Check the status of sw2 periodically
+       read_sw1();                                                  // Check the status of sw1 periodically
+       read_sw2();                                                  // Check the status of sw2 periodically
+       ProcessKeyPress();                                           // Check if key 1 or key 2 of the 4x4 keypad was pressed
+       if  (key == 1)                      StartStopCommand();      // If key 1 is pressed in 4x4 keypad, process Start and Stop Commands
+//       if( (key == 2) && (stop_flag == 0)) ResumePauseCommand();    // If key 2 is pressed in 4x4 keypad, process Resume and Pause Commands
       }
    return;  // sw1 not pressed during the entire duration of the delay
 }
+
