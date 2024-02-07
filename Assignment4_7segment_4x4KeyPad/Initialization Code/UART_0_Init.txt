@@ -1,0 +1,43 @@
+Initialize UART0 (connected to USB cable)
+							----------------------
+							** Peripherals Used **
+							----------------------
+					=================================================
+					|	  PIN		|	Functionality	|
+					=================================================
+					|	  PA0		|	Rx (UART0)	|
+					|	  PA1		|	Tx (UART0)	|
+					=================================================
+
+
+void UART0_init(void)
+{
+    SYSCTL_RCGCUART_R |= 0x01;		// Enable UART0
+    SYSCTL_RCGCGPIO_R |= 0x01;		// Enable corresponding GPIO port (PORTA)
+    // Set GPIO AFSEL bits
+    // PA7 PA6 PA5 PA4 PA3 PA2 PA1 PA0
+    //                          Tx  Rx
+    //  0   0   0   0   0   0   1   1
+    GPIO_PORTA_AFSEL_R = 0x03;
+    // PCTL is 32 bit register, 4 bits are used to select alternate functions of each GPIO pin
+    GPIO_PORTA_PCTL_R = 0x00000011;
+    GPIO_PORTA_DEN_R |= 0x03;		// GPIO digital enable for PA0, PA1
+    // clk = 16 MHz
+    // Desired baud rate = clk / (16 * clk_div)
+    // UARTIBRD and UARTFBRD
+    // If Desired baud rate = XXX.YYY
+    // then UARTIBRD = XXX and UARTFBRD = (0.YYY * 64) + 0.5
+    // baud_rate = 115200
+    UART0_IBRD_R = 8;
+    UART0_FBRD_R = 44;
+    UART0_LCRH_R = 0x60;		// 0x60 for 8 data bits, 1 stop, 1 start (refer datasheet for details)
+    UART0_CC_R = 0x0;			// use system clock
+    UART0_CTL_R = 0x0301;		// UART Rx, UART Tx and UART module enable
+    GPIO_PORTA_AMSEL_R = 0;		// disable analog mode select
+
+    // Interrupt setup for UART0
+    // UART0_IM_R |= 0x10;       	// enable interrupt mask for receive
+    // UART0_ICR_R = (0x010);    	// clear interrupt if any
+    // NVIC_PRI1_R |= 0x00006000;	// priority = 3
+    // NVIC_EN0_R |= 0x00000020; 	// enable interrupt for UART0 (IRQ number = 5)
+}
