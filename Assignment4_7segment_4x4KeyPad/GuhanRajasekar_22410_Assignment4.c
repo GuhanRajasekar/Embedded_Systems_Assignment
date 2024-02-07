@@ -20,17 +20,18 @@
 #define COLOR_WHITE_ON     0x0E  // B + R + G
 #define NO_COLOR           0x00  // No color
 
-void GPIOE_INIT();             // Function to Initialize Port E of TIVA
-void GPIOC_INIT();             // Function to Initialize Port C of TIVA
-void delayMs(int n);           // Software function to implement delay
-void processInvalidCommand();  // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
-void read_sw1();               // Function to handle sw1 press
-void read_sw2();               // Function to handle sw2 press
-void removeWhiteSpaces();      // Function to remove all the white spaces (space and tabs) entered in the command by the user
-void StartStopCommand();       // Function to handle Start and Stop Commands
-void ResumePauseCommand();     // Function to handle Resume and Pause Commands
-void delay_1_Ms();             // Function to add a delay of 1ms
-void ProcessKeyPress();        // Function to check if any one of the keys in the 4x4 keypad was pressed
+void GPIOE_INIT();              // Function to Initialize Port E of TIVA
+void GPIOC_INIT();              // Function to Initialize Port C of TIVA
+void delayMs(int n);            // Software function to implement delay
+void processInvalidCommand();   // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
+void read_sw1();                // Function to handle sw1 press
+void read_sw2();                // Function to handle sw2 press
+void removeWhiteSpaces();       // Function to remove all the white spaces (space and tabs) entered in the command by the user
+void StartStopCommand();        // Function to handle Start and Stop Commands given through console
+void StartStopCommand_keypad(); // Function to handle Start and Stop Commands given through keypad
+void ResumePauseCommand();      // Function to handle Resume and Pause Commands
+int  processKeyPress();         // Function to check if any one of the keys in the 4x4 keypad was pressed
+void delay_1_Ms();
 
 char console_cmd_buffer[30];   // global character array to store the contents given by the user
 char console_cmd_buffer2[30];  // global character array to store the contents given by the user without the spaces and the tabs
@@ -43,10 +44,9 @@ int Blink_Delay_Pause = 1000;  // global variable to save the blink delay before
 int sw1_pressed = 0;           // flag to indicate if sw1 has been pressed
 int sw2_pressed = 0;           // flag to indicate if sw2 has been pressed
 int count_sw2 = 0;             // to keep track of the number of times SW2 was pressed
-int stop_flag =  0;             // 0 / 1 => Stop Command is  inactive / active
-int pause_flag = 0;            //  0 / 1 => Pause Command is inactive / active
+int stop_flag =  0;           // -1/0/1 => Stop Command is  inactive / active
+int pause_flag = 0;           // -1/0/1 => Pause Command is inactive / active
 int num = 0;                   // This variable is used in ProcessKeyPress() function
-int key = 0;                   // 0 / 1 / 2 => No Key Press / 1st Switch Pressed / 2nd Switch Pressed in 4x4 keyboard
 
 
 // Function to Initialize PortE of TIVA
@@ -181,9 +181,8 @@ void read_sw2()
 
 
 // Function to check if first or the second key of the 4x4 Keypad was done
-void ProcessKeyPress()
+int processKeyPress()
 {
-    key = 0;
     int row = 0, col = 0;
     for(row = 0; row < 2; row ++)
     {
@@ -196,17 +195,18 @@ void ProcessKeyPress()
             if( num == 0xE0)
             {
                 col = 1;
-                key =  ( (row * 4) + col );
+                return ((row * 4) + col );
             }
             else if( num == 0xD0)
             {
                 col = 2;
-                key = ( (row * 4) + col );
+                return ( (row * 4) + col );
             }
         }
+        delay_1_Ms();
 
     }
-    return ;
+    return 0;
 }
 
 // Function to handle which Color must be blinking and at what rate the blink must be happening
@@ -271,21 +271,17 @@ void emptyBuffer()
     id = 0;                         // Setting the index of the character array as 0 as we need to start from the beginning
 }
 
-// Function to handle Start and Stop Commands
+// Function to handle Start and Stop Commands that is given through console
 void StartStopCommand()
 {
-    if (    (strcmp(console_cmd_buffer,"start") == 0)
-         || (key == 1)
-       )
+    if(strcmp(console_cmd_buffer,"start") == 0)
     {
         Color = 1;              // Set color to green
         Blink_Delay = 1000;     // Set delay to the least value
         stop_flag = 0;          // 0 indicates that the stop feature is not active
         return;
     }
-    else if (   (strcmp(console_cmd_buffer,"stop") == 0)
-             || (key == 1)
-            )
+    else if(strcmp(console_cmd_buffer,"stop") == 0)
     {
         Color = 0;       // Set Color to No Color
         stop_flag = 1;   // 1 indicates that stop feature is active
@@ -294,13 +290,31 @@ void StartStopCommand()
     else return;
 }
 
+// Function to handle Start and Stop Commands that is given through key1 of 4x4 keypad
+void StartStopCommand_keypad()
+{
+   if(stop_flag == 0)
+     {
+        Color     = 0;
+        stop_flag = 1;  // Stop the blinking
+        return;
+      }
+   if(stop_flag == 1)
+      {
+         Color = 1;
+         Blink_Delay = 1000;
+         stop_flag = 0;
+         return;
+      }
+    return;
+}
 // Function to handle Resume and Pause Commands
 void ResumePauseCommand()
 {
     /* Here the pause_flag == 0 check will make sure that in the case of user entering multiple
        pause commands continuously, only the first pause command is considered
     */
-    if(    ( (strcmp(console_cmd_buffer2, "pause") == 0)  || (key == 2))
+    if(    (strcmp(console_cmd_buffer2, "pause") == 0)
         && (pause_flag == 0)
       )
     {
@@ -312,7 +326,7 @@ void ResumePauseCommand()
        Color = 0;
        return;
     }
-    else if( (strcmp(console_cmd_buffer2 , "resume") == 0) || (key == 2) )
+    else if((strcmp(console_cmd_buffer2 , "resume") == 0))
     {
         pause_flag = 0;
         Color = Color_Pause;
@@ -419,9 +433,7 @@ int main()
             read_sw1();       // Check for sw1 press even when the user has not given any new command
             read_sw2();       // Check for sw2 press even when the user has not given any new command
             processColors();  // Maintain LED Blink state even when there is no new command
-            ProcessKeyPress();                                           // Check if key 1 or key 2 of the 4x4 keypad was pressed
-            if  (key == 1)                      StartStopCommand();      // If key 1 is pressed in 4x4 keypad, process Start and Stop Commands
-//            if( (key == 2) && (stop_flag == 0)) ResumePauseCommand();    // If key 2 is pressed in 4x4 keypad, process Resume and Pause Commands
+            if(processKeyPress() == 1) StartStopCommand_keypad();
           }
         val = UARTCharGet(UART0_BASE);
         if((val == 0x0D))                 processEnterKey();                    // If entered character is 0x0D => Enter key has been pressed
@@ -430,9 +442,7 @@ int main()
         read_sw1();                                                             // Keep checking for sw1 press
         read_sw2();                                                             // Keep checking for sw2 press
         processColors();                                                        // Maintain LED blink state even in the middle of a new command
-        ProcessKeyPress();                                                      // Check if key 1 or key 2 of the 4x4 keypad was pressed
-        if  (key == 1)                      StartStopCommand();                 // If key 1 is pressed in 4x4 keypad, process Start and Stop Commands
-//        if( (key == 2) && (stop_flag == 0)) ResumePauseCommand();               // If key 2 is pressed in 4x4 keypad, process Resume and Pause Commands
+        if(processKeyPress() == 1) StartStopCommand_keypad();
     }
 
   return 0;
@@ -460,10 +470,19 @@ void delayMs(int n)
        }
        read_sw1();                                                  // Check the status of sw1 periodically
        read_sw2();                                                  // Check the status of sw2 periodically
-       ProcessKeyPress();                                           // Check if key 1 or key 2 of the 4x4 keypad was pressed
-       if  (key == 1)                      StartStopCommand();      // If key 1 is pressed in 4x4 keypad, process Start and Stop Commands
-//       if( (key == 2) && (stop_flag == 0)) ResumePauseCommand();    // If key 2 is pressed in 4x4 keypad, process Resume and Pause Commands
-      }
+       if(processKeyPress() == 1) StartStopCommand_keypad();
+
+ }
    return;  // sw1 not pressed during the entire duration of the delay
+}
+
+void delay_1_Ms(void)
+{
+    int i, j ;
+
+    for(i = 0; i < 1 ; i ++)
+    {
+        for(j = 0; j < 2000; j++);
+    }
 }
 
