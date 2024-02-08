@@ -31,7 +31,6 @@ void StartStopCommand();        // Function to handle Start and Stop Commands gi
 void StartStopCommand_keypad(); // Function to handle Start and Stop Commands given through keypad
 void ResumePauseCommand();      // Function to handle Resume and Pause Commands
 int  processKeyPress();         // Function to check if any one of the keys in the 4x4 keypad was pressed
-void delay_1_Ms();
 
 char console_cmd_buffer[30];   // global character array to store the contents given by the user
 char console_cmd_buffer2[30];  // global character array to store the contents given by the user without the spaces and the tabs
@@ -179,33 +178,41 @@ void read_sw2()
     return;
 }
 
+// Function for Key Press Detection
+//int isKeyPressed(void)
+//{
+//    GPIO_PORTE_DATA_R = 0x00 ;
+//
+//    if( (GPIO_PORTC_DATA_R & 0xF0) != 0xF0 )
+//        return 1;  // Some key has been pressed
+//    else
+//        return 0;  // No key has been pressed
+//}
 
-// Function to check if first or the second key of the 4x4 Keypad was done
+// Function for Key Press Identification
 int processKeyPress()
 {
-    int row = 0, col = 0;
-    for(row = 0; row < 2; row ++)
-    {
-        GPIO_PORTE_DATA_R = ( 0x0F & ~(1 << row) );
-
-        num = GPIO_PORTC_DATA_R & 0xF0 ;
-
-        if( num != 0x0F)
+        int row = 0, col = 0;
+        for(row = 0; row < 2; row ++)
         {
-            if( num == 0xE0)
+//            GPIO_PORTE_DATA_R = ( 0x0F & ~(1 << row) );  // Driving one row low at a time
+            if(row == 0)   GPIO_PORTE_DATA_R = 0x0E     ; // Driving PE0 low
+            else           GPIO_PORTE_DATA_R = 0x0D;      // Driving PE1 low
+            num = GPIO_PORTC_DATA_R & 0xF0 ;             // num stores the value of data in PC4 - PC7
+            if( num != 0x0F)          // Some key was pressed
             {
-                col = 1;
-                return ((row * 4) + col );
-            }
-            else if( num == 0xD0)
-            {
-                col = 2;
-                return ( (row * 4) + col );
+                if( num == 0xE0)      // Key in col 1 was pressed
+                {
+                    col = 1;
+                    return ((row * 4) + col );
+                }
+                else if( num == 0xD0) // Key in col2 was pressed
+                {
+                    col = 2;
+                    return ( (row * 4) + col );
+                }
             }
         }
-        delay_1_Ms();
-
-    }
     return 0;
 }
 
@@ -293,19 +300,31 @@ void StartStopCommand()
 // Function to handle Start and Stop Commands that is given through key1 of 4x4 keypad
 void StartStopCommand_keypad()
 {
-   if(stop_flag == 0)
-     {
-        Color     = 0;
-        stop_flag = 1;  // Stop the blinking
-        return;
-      }
-   if(stop_flag == 1)
+    int key1;
+    key1 = processKeyPress();
+    if(key1== 1)
+    {
+      while(key1 == 1)
       {
-         Color = 1;
-         Blink_Delay = 1000;
-         stop_flag = 0;
-         return;
+         key1 = processKeyPress();
+         if(key1 != 1)
+         {
+             if(stop_flag == 0)
+              {
+                Color     = 0;
+                stop_flag = 1;  // Stop the blinking
+                return;
+              }
+             if(stop_flag == 1)
+              {
+                 Color = 1;
+                 Blink_Delay = 1000;
+                 stop_flag = 0;
+                 return;
+              }
+         }
       }
+    }
     return;
 }
 // Function to handle Resume and Pause Commands
@@ -474,15 +493,5 @@ void delayMs(int n)
 
  }
    return;  // sw1 not pressed during the entire duration of the delay
-}
-
-void delay_1_Ms(void)
-{
-    int i, j ;
-
-    for(i = 0; i < 1 ; i ++)
-    {
-        for(j = 0; j < 2000; j++);
-    }
 }
 
