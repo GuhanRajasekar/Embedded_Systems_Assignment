@@ -22,6 +22,7 @@
 
 void GPIOE_INIT();                   // Function to Initialize Port E of TIVA
 void GPIOC_INIT();                   // Function to Initialize Port C of TIVA
+void SSD_init();                     // Function to Initialize SSD ( Seven Segment Display )
 void delayMs(int n);                 // Software function to implement delay
 void processInvalidCommand();        // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
 void read_sw1();                     // Function to handle sw1 press
@@ -71,6 +72,21 @@ void GPIOC_INIT()
     GPIO_PORTC_DEN_R |= 0xF0;               /* enable the GPIO pins for digital function */
     GPIO_PORTC_PUR_R |= 0xF0 ;              /* 1 -> The corresponding pin's weak pull-up resistor is enabled */
 }
+
+// Function to Initialize SSD ( Seven Segment Display )
+void SSD_init()
+{
+    SYSCTL_RCGC2_R |= 0x00000003;       // enable clock to GPIOA, GPIOB at clock gating control register
+    // Enable the GPIO pins
+    // For PORTB, all pins are used to set 7 segment display
+    // For PORTA, pins 7 to 4 are used for selecting one of the four 7 segment display
+    GPIO_PORTA_DIR_R |= 0xF0;       // PA4 to PA7 set to output
+    GPIO_PORTB_DIR_R |= 0xFF;       // PB0 to PB7 set to output
+    // enable the GPIO pins for digital function
+    GPIO_PORTA_DEN_R |= 0xF0;       // enabling PA4 to PA7
+    GPIO_PORTB_DEN_R |= 0xFF;       // enabling PB0 to PB8
+}
+
 // Function to remove all the white spaces (space and tabs) entered in the command by the user
 void removeWhiteSpaces()
 {
@@ -446,7 +462,14 @@ void processInvalidCommand()
     /* Here the if condition makes sure that that the prompt is not displayed when stop state is active */
     if((stop_flag) == 0 && (pause_flag == 0))
     {
-        char* s  = "\n\n\rPlease enter any of the following commands:\n\r1).Color <Color_Name>\n\r2).Blink <Blink_Rate>\n\rValid numbers to be entered after 'blink' are 1,2,4,8,16,32\n\n\r";
+        char* s  = "\n\n\rPlease enter any of the following commands:\n\r"
+                   "1).Color <Color_Name>\n\r"
+                   "2).Blink <Blink_Rate>\n\r"
+                   "3).Start\n\r"
+                   "4).Stop\n\r"
+                   "5).Pause\n\r"
+                   "6).Resume\n\r"
+                   "Valid numbers to be entered after 'blink' are 1,2,4,8,16,32\n\n\r";
         int i = 0; // for indexing purposes
         while(s[i] != '\0')
         {
@@ -469,8 +492,10 @@ int main()
     GPIO_PORTF_PUR_R =  0x11;        /* enable pull up for pin 4 (SW1) and pin 0 (SW2). If this is not present, I think SW1 and SW2 are always considered to be pressed*///
 
     // Initialize Port E and Port C as they will be connected to rows and columns of the 4x4 keypad respectively
-    GPIOE_INIT();                    /* Initialize Port E*/
-    GPIOC_INIT();                    /* Initialize Port C*/
+    GPIOE_INIT();                    /* Initialize Port E */
+    GPIOC_INIT();                    /* Initialize Port C */
+
+    SSD_init();                      /* Initialize SSD(Seven Segment Display) */
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
