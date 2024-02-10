@@ -235,8 +235,9 @@ void processSSD(int ssd)
    int num = 0;   // value to be displayed on the selected seven segment display
    if(ssd == 4)
    {
-       GPIO_PORTA_DATA_R = 0x10;  // PA4 = 1 => Right most SSD is chosen to display the color code
-       num = Color;               // Display the code of the color being displayed
+       GPIO_PORTA_DATA_R = 0x10;                  // PA4 = 1 => Right most SSD is chosen to display the color code
+       if(pause_flag == 1)  num = Color_Pause;    // Display the code of the color being displayed
+       else                 num = Color;
    }
    if(ssd == 1)
    {
