@@ -33,9 +33,9 @@ void StartStopCommand_Keypad();      // Function to handle Start and Stop Comman
 void ResumePauseCommand_Console();   // Function to handle Resume and Pause Commands given through console
 void ResumePauseCommand_Keypad();    // Function to handle Resume and Pause Commands given through keypad
 int  processKeyPress();              // Function to check if any one of the keys in the 4x4 keypad was pressed
-void processLastSSD();               // Function to display color code in the right most SSD (Seven Segment Display)
-void processFirstTwoSSD();           // Function to display the number of color changes in the first two LEDs
-void SSD_Delay();                     // Function to insert some delay between the glowing of various LEDs
+void processSSD(int);                // Function to handle display of numbers in SSD (Seven Segment Display)
+void delaySSD();                     // Function to insert some delay between the glowing of various LEDs
+void SSD_Display_Handler();          // Function to handle display of numbers in SSD with delay in between various SSDs
 
 char console_cmd_buffer[30];      // global character array to store the contents given by the user
 char console_cmd_buffer2[30];     // global character array to store the contents given by the user without the spaces and the tabs
@@ -52,6 +52,7 @@ int stop_flag =  0;               // 0/1 => Stop Command is  inactive / active
 int pause_flag = 0;               // 0/1 => Pause Command is inactive / active
 int num = 0;                      // This variable is used in ProcessKeyPress() function
 int key1_pressed_first_time = 0;  // 0/1 => Key 1 has not been pressed at all / Key 1 has been pressed
+int color_change = 0;            // Number of color changes that will be displayed on the first two seven segment displays, starting from the right
 
 
 // Function to Initialize PortE of TIVA
@@ -108,13 +109,13 @@ void removeWhiteSpaces()
 
 int findColor()               // Function to determine which color needs to be lit
 {
-   if(strcmp(console_cmd_buffer2 ,"colorgreen")== 0)    return 1; //Green Color
-   if(strcmp(console_cmd_buffer2 ,"colorblue") == 0)    return 2; //Blue Color
-   if(strcmp(console_cmd_buffer2 ,"colorcyan") == 0)    return 3; //Cyan Color
-   if(strcmp(console_cmd_buffer2 ,"colorred") == 0)     return 4; //Red Color
-   if(strcmp(console_cmd_buffer2 ,"coloryellow") == 0)  return 5; //Yellow Color
-   if(strcmp(console_cmd_buffer2 ,"colormagenta") == 0) return 6; //Magenta Color
-   if(strcmp(console_cmd_buffer2 ,"colorwhite") == 0)   return 7; //White Color
+   if(strcmp(console_cmd_buffer2 ,"colorgreen")== 0)    {color_change += 1; return 1;} //Green Color
+   if(strcmp(console_cmd_buffer2 ,"colorblue") == 0)    {color_change += 1; return 2;} //Blue Color
+   if(strcmp(console_cmd_buffer2 ,"colorcyan") == 0)    {color_change += 1; return 3;} //Cyan Color
+   if(strcmp(console_cmd_buffer2 ,"colorred") == 0)     {color_change += 1; return 4;} //Red Color
+   if(strcmp(console_cmd_buffer2 ,"coloryellow") == 0)  {color_change += 1; return 5;} //Yellow Color
+   if(strcmp(console_cmd_buffer2 ,"colormagenta") == 0) {color_change += 1; return 6;} //Magenta Color
+   if(strcmp(console_cmd_buffer2 ,"colorwhite") == 0)   {color_change += 1; return 7;} //White Color
    processInvalidCommand();                                       // If none of the entered data is valid, give appropriate prompt to the user
    return Color;                                                  //Invalid Data Entered (Simply return the current state of Color => Do not modify it)
 }
@@ -150,6 +151,7 @@ void read_sw1()
             if(current_state_sw1 == 0x10)
             {
                 sw1_pressed = 1;                           // consider sw1 to be pressed
+                color_change += 1;                         // number of color changes will be displayed on the first two SSDs from the left
                 Color = Color + 1;
                 if(Color == 8) Color = 1;
                 break;
@@ -227,11 +229,29 @@ int processKeyPress()
     return 0;
 }
 
-// Function to display color code in the right most SSD (Seven Segment Display)
-void processLastSSD()
+// Function to handle Seven Segment displays
+void processSSD(int ssd)
 {
-   GPIO_PORTA_DATA_R = 0x10;  // PA4 = 1 => Right most SSD is chosen
-   switch(Color)
+   int num = 0;   // value to be displayed on the selected seven segment display
+   if(ssd == 4)
+   {
+       GPIO_PORTA_DATA_R = 0x10;  // PA4 = 1 => Right most SSD is chosen to display the color code
+       num = Color;               // Display the code of the color being displayed
+   }
+   if(ssd == 1)
+   {
+       int color_change_tens = color_change / 10; // get the digit in the tens place of color change number
+       GPIO_PORTA_DATA_R     = 0x80;       // PA7 = 1 => Left most SSD is chosen to display the tens digit of the color change
+       num = color_change_tens;
+   }
+   if(ssd == 2)
+   {
+       int color_change_units = color_change % 10; // get the digit in the units place of the color change number
+       GPIO_PORTA_DATA_R     = 0x40; // PA6 = 1 => Second SSD from the left is chosen to display the tens digit of the color change
+       num = color_change_units;
+   }
+
+   switch(num)
    {
      case 1  : GPIO_PORTB_DATA_R = 0x06; break;
      case 2  : GPIO_PORTB_DATA_R = 0x5B; break;
@@ -241,28 +261,22 @@ void processLastSSD()
      case 6  : GPIO_PORTB_DATA_R = 0x7D; break;
      case 7  : GPIO_PORTB_DATA_R = 0x07; break;
      case 8  : GPIO_PORTB_DATA_R = 0x7F; break;
+     case 9  : GPIO_PORTB_DATA_R = 0x6F; break;
      default : GPIO_PORTB_DATA_R = 0x3F; break;
    }
    return;
 }
 
-// Function to process first two seven segment displays
-void processFirstTwoSSD()
+void SSD_Display_Handler()
 {
-    GPIO_PORTA_DATA_R = 0x80;  // PA4 = 1 => Right most SSD is chosen
-    switch(Color)
-    {
-      case 1  : GPIO_PORTB_DATA_R = 0x06; break;   // green
-      case 2  : GPIO_PORTB_DATA_R = 0x5B; break;   // blue
-      case 3  : GPIO_PORTB_DATA_R = 0x4F; break;   // cyan
-      case 4  : GPIO_PORTB_DATA_R = 0x66; break;   // red
-      case 5  : GPIO_PORTB_DATA_R = 0x6D; break;   // yellow
-      case 6  : GPIO_PORTB_DATA_R = 0x7D; break;   // magenta
-      case 7  : GPIO_PORTB_DATA_R = 0x07; break;   // white
-      default : GPIO_PORTB_DATA_R = 0x3F; break;   // no color
-    }
-    return;
+    processSSD(1);   // Display the digit in the tens place of the color change value in the left most seven segment display
+    delaySSD();      // Add some delay
+    processSSD(2);   // Display the digit in the units place of the color change value in the second seven segment display from the left
+    delaySSD();      // Add some delay
+    processSSD(4);   // Display the color code in the right most seven segment display
+    delaySSD();      // Add some delay
 }
+
 // Function to handle which Color must be blinking and at what rate the blink must be happening
 void processColors()
 {
@@ -335,14 +349,16 @@ void StartStopCommand_Console()
     if(strcmp(console_cmd_buffer,"start") == 0)
     {
         Color = 1;              // Set color to green
+        color_change = 1;       // Start of system indicates first color (green)
         Blink_Delay = 1000;     // Set delay to the least value
         stop_flag = 0;          // 0 indicates that the stop feature is not active
         return;
     }
     else if(strcmp(console_cmd_buffer,"stop") == 0)
     {
-        Color = 0;       // Set Color to No Color
-        stop_flag = 1;   // 1 indicates that stop feature is active
+        Color = 0;         // Set Color to No Color
+        color_change = 0;  // Stop of system indicates no color is active
+        stop_flag = 1;     // 1 indicates that stop feature is active
         return;
     }
     else return;
@@ -368,6 +384,7 @@ void StartStopCommand_Keypad()
                 )
               {
                  key1_pressed_first_time = 1;
+                 color_change = 1;                // Start of system indicates first color (green)
                  Color = 1;                       // Set color to green
                  Blink_Delay = 1000;              // Set speed to the lowest speed
                  stop_flag = 0;                   // Set stop feature to inactive
@@ -376,8 +393,9 @@ void StartStopCommand_Keypad()
 
              if(stop_flag == 0) // Stop feature is currently not active
               {
-                Color     = 0;  // Set color to no color
-                stop_flag = 1;  // Stop the blinking
+                Color        = 0;  // Set color to no color
+                color_change = 0;  // Stop of system indicates no color is active
+                stop_flag    = 1;  // Stop the blinking
                 return;
               }
          }
@@ -499,21 +517,24 @@ void processNormalKey()
 // Functions to give directions to the user when an Invalid Command has been entered
 void processInvalidCommand()
 {
-    /* Here the if condition makes sure that that the prompt is not displayed when stop state is active */
-    char* s  = "\n\n\rPlease enter any of the following commands:\n\r"
-                     "1).Color <Color_Name>\n\r"
-                     "2).Blink <Blink_Rate>\n\r"
-                     "3).Start\n\r"
-                     "4).Stop\n\r"
-                     "5).Pause\n\r"
-                     "6).Resume\n\r"
-                     "Valid numbers to be entered after 'blink' are 1,2,4,8,16,32\n\n\r";
-    int i = 0; // for indexing purposes
-    while(s[i] != '\0')
-      {
-         UARTCharPut(UART0_BASE, s[i]);
-         i = i+1;
-      }
+    if(pause_flag == 0 && stop_flag == 0)
+    {
+        /* Here the if condition makes sure that that the prompt is not displayed when stop state is active */
+        char* s  = "\n\n\rPlease enter any of the following commands:\n\r"
+                         "1).Color <Color_Name>\n\r"
+                         "2).Blink <Blink_Rate>\n\r"
+                         "3).Start\n\r"
+                         "4).Stop\n\r"
+                         "5).Pause\n\r"
+                         "6).Resume\n\r"
+                         "Valid numbers to be entered after 'blink' are 1,2,4,8,16,32\n\n\r";
+        int i = 0; // for indexing purposes
+        while(s[i] != '\0')
+          {
+             UARTCharPut(UART0_BASE, s[i]);
+             i = i+1;
+          }
+    }
     return;
 }
 
@@ -552,22 +573,19 @@ int main()
             processColors();  // Maintain LED Blink state even when there is no new command
             if(processKeyPress() == 1) StartStopCommand_Keypad();      // Handle toggling between start  and stop commands given through keypad
             if(processKeyPress() == 2) ResumePauseCommand_Keypad();    // Handle toggling between resume and pause commands given through keypad
-            processLastSSD();     // To display color code in the right most SSD (Seven Segment Display)
-            SSD_Delay();
-            processFirstTwoSSD();
+            SSD_Display_Handler();                                     // Seven Segment Display (SSD) handling
           }
+
         val = UARTCharGet(UART0_BASE);
-        if((val == 0x0D))                 processEnterKey();                    // If entered character is 0x0D => Enter key has been pressed
-        else if(val == 0x08 && id>0)      processBackSpaceKey();                // If entered character is 0x08 => Back Space Key has been pressed
-        else                              processNormalKey();                   // To process Key press that is Neither "Enter" nor "Back Space"
-        read_sw1();                                                             // Keep checking for sw1 press
-        read_sw2();                                                             // Keep checking for sw2 press
-        processColors();                                                        // Maintain LED blink state even in the middle of a new command
-        if(processKeyPress() == 1) StartStopCommand_Keypad();                   // Handle toggling between start  and stop commands given through keypad
-        if(processKeyPress() == 2) ResumePauseCommand_Keypad();                 // Handle toggling between resume and pause commands given through keypad
-        processLastSSD();  // To display color code in the right most SSD (Seven Segment Display)
-        SSD_Delay();
-        processFirstTwoSSD();
+        if((val == 0x0D))                 processEnterKey();        // If entered character is 0x0D => Enter key has been pressed
+        else if(val == 0x08 && id>0)      processBackSpaceKey();    // If entered character is 0x08 => Back Space Key has been pressed
+        else                              processNormalKey();       // To process Key press that is Neither "Enter" nor "Back Space"
+        read_sw1();                                                 // Keep checking for sw1 press
+        read_sw2();                                                 // Keep checking for sw2 press
+        processColors();                                            // Maintain LED blink state even in the middle of a new command
+        if(processKeyPress() == 1) StartStopCommand_Keypad();       // Handle toggling between start  and stop commands given through keypad
+        if(processKeyPress() == 2) ResumePauseCommand_Keypad();     // Handle toggling between resume and pause commands given through keypad
+        SSD_Display_Handler();                                      // Seven Segment Display handling
     }
 
   return 0;
@@ -589,27 +607,24 @@ void delayMs(int n)
        if(UARTCharsAvail(UART0_BASE))
        {
            val = UARTCharGet(UART0_BASE);
-           if((val == 0x0D))                 processEnterKey();                // If entered character is 0x0D => Enter key has been pressed
-           else if(val == 0x08 && id>0)      processBackSpaceKey();            // If entered character is 0x08 => Back Space Key has been pressed
-           else                              processNormalKey();               // To process Key press that is Neither "Enter" nor "Back Space"
+           if((val == 0x0D))                 processEnterKey();      // If entered character is 0x0D => Enter key has been pressed
+           else if(val == 0x08 && id>0)      processBackSpaceKey();  // If entered character is 0x08 => Back Space Key has been pressed
+           else                              processNormalKey();     // To process Key press that is Neither "Enter" nor "Back Space"
        }
-       read_sw1();                                                  // Check the status of sw1 periodically
-       read_sw2();                                                  // Check the status of sw2 periodically
-       if(processKeyPress() == 1) StartStopCommand_Keypad();                   // Handle toggling between start  and stop commands given through keypad
-       if(processKeyPress() == 2) ResumePauseCommand_Keypad();                 // Handle toggling between resume and pause commands given through keypad
-       processLastSSD();  // To display color code in the right most SSD (Seven Segment Display)
-       SSD_Delay();
-       processFirstTwoSSD();
-
+       read_sw1();                                                   // Check the status of sw1 periodically
+       read_sw2();                                                   // Check the status of sw2 periodically
+       if(processKeyPress() == 1) StartStopCommand_Keypad();         // Handle toggling between start  and stop commands given through keypad
+       if(processKeyPress() == 2) ResumePauseCommand_Keypad();       // Handle toggling between resume and pause commands given through keypad
+       SSD_Display_Handler();                                        // Seven Segment Display (SSD) handling
  }
    return;  // sw1 not pressed during the entire duration of the delay
 }
 
 
-void SSD_Delay()
+void delaySSD()
 {
 
-    for(int j = 0; j<2000; j++)
+    for(int j = 0; j<1500; j++)
        {
             // Do nothing for 1 ms
        }
