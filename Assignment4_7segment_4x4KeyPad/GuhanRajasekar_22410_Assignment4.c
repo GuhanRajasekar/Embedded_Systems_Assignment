@@ -43,8 +43,8 @@ char val;                         // global character variable that is used acro
 int id = 0;                       // global variable to take care of indexing of the character buffer array
 int Color = 0;                    // global variable to denote which color is currently active ( 0 indicates no color )
 int Color_Pause = 0;              // global variable to save the Color state when pause command is active
-int Blink_Delay = 1000;           // global variable to store the blink delay
-int Blink_Delay_Pause = 1000;     // global variable to save the blink delay before going into pause state
+int Blink_Delay = 250;            // global variable to store the blink delay
+int Blink_Delay_Pause = 250;      // global variable to save the blink delay before going into pause state
 int sw1_pressed = 0;              // flag to indicate if sw1 has been pressed
 int sw2_pressed = 0;              // flag to indicate if sw2 has been pressed
 int count_sw2 = 0;                // to keep track of the number of times SW2 was pressed
@@ -128,12 +128,12 @@ int findBlinkRate()
        For example if user gives the command Blink 8 , the next time switch 2 is pressed, it must be go to Blink 16.
        For that to happen, we need to modify count_sw2 variable which will be used in the switch case statements in the read_sw2() function.
      */
-    if(strcmp(console_cmd_buffer2 ,"blink1") == 0)   { count_sw2 = 6; return 1000;}
-    if(strcmp(console_cmd_buffer2 ,"blink2")  == 0)  { count_sw2 = 1; return 250;}
-    if(strcmp(console_cmd_buffer2 ,"blink4")  == 0)  { count_sw2 = 2; return 125;}
-    if(strcmp(console_cmd_buffer2 ,"blink8")  == 0)  { count_sw2 = 3; return 61.25;}
-    if(strcmp(console_cmd_buffer2 ,"blink16")  == 0) { count_sw2 = 4; return 31.25;}
-    if(strcmp(console_cmd_buffer2 ,"blink32") == 0)  { count_sw2 = 5; return 15.625;}
+    if(strcmp(console_cmd_buffer2 ,"blink1") == 0)   { count_sw2 = 6; return 250;}
+    if(strcmp(console_cmd_buffer2 ,"blink2")  == 0)  { count_sw2 = 1; return 125;}
+    if(strcmp(console_cmd_buffer2 ,"blink4")  == 0)  { count_sw2 = 2; return 62.5;}
+    if(strcmp(console_cmd_buffer2 ,"blink8")  == 0)  { count_sw2 = 3; return 30.625;}
+    if(strcmp(console_cmd_buffer2 ,"blink16")  == 0) { count_sw2 = 4; return 15.75;}
+    if(strcmp(console_cmd_buffer2 ,"blink32") == 0)  { count_sw2 = 5; return 7.8125;}
     processInvalidCommand();  // If none of the entered data is valid, give appropriate prompt to the user
     return Blink_Delay;       // Invalid Blink Command entered by the user => Retain the previous value of the blink rate
 }
@@ -177,22 +177,22 @@ void read_sw2()
                 if(count_sw2 == 7) count_sw2 = 1;
                 switch(count_sw2)
                 {
-                   case 1: Blink_Delay = 250;    // blink 2 times in two seconds  => blink once in 1 second
+                   case 1: Blink_Delay = 125;   // blink 2 times in two seconds  => blink once in 1 second
                            break;
 
-                   case 2: Blink_Delay = 125;    // blink 4 times in two seconds  => blink 2 times in 1 second
+                   case 2: Blink_Delay = 62.5;    // blink 4 times in two seconds  => blink 2 times in 1 second
                            break;
 
-                   case 3: Blink_Delay = 62.5;   // blink 8 times in two seconds  => blink 4 times in 1 second
+                   case 3: Blink_Delay = 31.25;  // blink 8 times in two seconds  => blink 4 times in 1 second
                            break;
 
-                   case 4: Blink_Delay = 31.25;  // blink 16 times in two seconds => blink 8 times in 1 second
+                   case 4: Blink_Delay = 15.625;  // blink 16 times in two seconds => blink 8 times in 1 second
                            break;
 
-                   case 5: Blink_Delay = 15.625;  // blink 32 times in two seconds => blink 16 times in one second => MAX SPEED (LED Constantly On)
+                   case 5: Blink_Delay = 7.8125;  // blink 32 times in two seconds => blink 16 times in one second => MAX SPEED (LED Constantly On)
                            break;
 
-                   case 6: Blink_Delay = 1000;   // After max speed switch back to blinking once in 2 seconds  (This is the lowest speed)
+                   case 6: Blink_Delay = 250;   // After max speed switch back to blinking once in 2 seconds  (This is the lowest speed)
                            break;
                 }
             }
