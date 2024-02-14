@@ -352,7 +352,7 @@ void StartStopCommand_Console()
     {
         Color = 1;              // Set color to green
         color_change = 1;       // Start of system indicates first color (green)
-        Blink_Delay = 1000;     // Set delay to the least value
+        Blink_Delay = 250;     // Set delay to the least value
         stop_flag = 0;          // 0 indicates that the stop feature is not active
         return;
     }
@@ -388,7 +388,7 @@ void StartStopCommand_Keypad()
                  key1_pressed_first_time = 1;
                  color_change = 1;                // Start of system indicates first color (green)
                  Color = 1;                       // Set color to green
-                 Blink_Delay = 1000;              // Set speed to the lowest speed
+                 Blink_Delay = 250;              // Set speed to the lowest speed
                  stop_flag = 0;                   // Set stop feature to inactive
                  return;
               }

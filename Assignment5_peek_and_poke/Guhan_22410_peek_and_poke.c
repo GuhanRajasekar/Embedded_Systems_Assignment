@@ -589,7 +589,7 @@ int main()
 
     PortAB_INIT();                  /* Initialize Port A and Port B */
     LCD_init();
-    LCD_PutData("Guhan Rajasekar");
+    LCD_PutData("Version 0.01");
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
