@@ -236,7 +236,8 @@ void processSSD(int ssd)
    if(ssd == 4)
    {
        GPIO_PORTA_DATA_R = 0x10;                  // PA4 = 1 => Right most SSD is chosen to display the color code
-       if(pause_flag == 1)  num = Color_Pause;    // Display the code of the color being displayed
+       if(stop_flag == 1)   num = 0;                   // stop has higher precedence over pause
+       else if(pause_flag == 1)  num = Color_Pause;    // Display the code of the color being displayed
        else                 num = Color;
    }
    if(ssd == 1)
