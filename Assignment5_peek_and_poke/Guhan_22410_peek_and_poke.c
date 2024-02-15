@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdlib.h>  //as we need to use atoi() function
 #include <./inc/tm4c123gh6pm.h>
 #include <inc/hw_memmap.h>
 #include <inc/hw_types.h>
@@ -35,8 +36,11 @@ void ResumePauseCommand_Keypad();    // Function to handle Resume and Pause Comm
 int  processKeyPress();              // Function to check if any one of the keys in the 4x4 keypad was pressed
 void processSSD(int);                // Function to handle display of numbers in SSD (Seven Segment Display)
 void delaySSD();                     // Function to insert some delay between the glowing of various LEDs
-void LCD_init();
-void delay_1Ms_LCD_Starter();
+void LCD_RecCommand();               // Function to send necessary control signals to LCD to receive a Command
+void LCD_RecData();                  // Function to send necessary control signals to LCD to receive Data
+void LCD_init();                     // Function to initialize the LCD
+void delay_1Ms_LCD_Starter();        // Delay used to send high to low pulse on PA7 (Enable Line of LCD)
+void processPeek();                  // Function to process Peek Command
 
 char console_cmd_buffer[30];      // global character array to store the contents given by the user
 char console_cmd_buffer2[30];     // global character array to store the contents given by the user without the spaces and the tabs
@@ -129,6 +133,11 @@ void LCD_PutData(char* data)
     {
         GPIO_PORTB_DATA_R = data[i]; LCD_RecData();
         i = i+1;
+        if(i == 16)
+        {
+            GPIO_PORTB_DATA_R = 0xC0; // Force Cursor To Second Line
+            LCD_RecCommand();         // Send Necessary Control Signals
+        }
     }
     return;
 }
@@ -383,7 +392,7 @@ void StartStopCommand_Console()
     {
         Color = 1;              // Set color to green
         color_change = 1;       // Start of system indicates first color (green)
-        Blink_Delay = 1000;     // Set delay to the least value
+        Blink_Delay = 250;     // Set delay to the least value
         stop_flag = 0;          // 0 indicates that the stop feature is not active
         return;
     }
@@ -419,7 +428,7 @@ void StartStopCommand_Keypad()
                  key1_pressed_first_time = 1;
                  color_change = 1;                // Start of system indicates first color (green)
                  Color = 1;                       // Set color to green
-                 Blink_Delay = 1000;              // Set speed to the lowest speed
+                 Blink_Delay = 250;              // Set speed to the lowest speed
                  stop_flag = 0;                   // Set stop feature to inactive
                  return;
               }
@@ -511,6 +520,7 @@ void processEnterKey()
     else if( (strstr(console_cmd_buffer2, "resume")) && (stop_flag == 0))  ResumePauseCommand_Console(); // Process Resume Command
     else if(strstr(console_cmd_buffer2, "stop"))     StartStopCommand_Console();   // Process Stop Command
     else if(strstr(console_cmd_buffer2, "start"))    StartStopCommand_Console();   // Process Start Command
+    else if(strstr(console_cmd_buffer2, "peek"))     processPeek();                // Process Peek Command
     else processInvalidCommand(); // Command with neither Color nor Blink has been entered => Give appropriate prompt to user to enter valid command
 
     /* Once Enter Key is pressed and Color and Blink Rate have been processed, empty the contents of the character array
@@ -569,6 +579,55 @@ void processInvalidCommand()
           }
     }
     return;
+}
+
+void write_some_data()
+{
+    char* ptr = 0x20000000;
+    *ptr     = 'G';   *(ptr+6) = 'R'; *(ptr+11) = 'E';
+    *(ptr+1) = 'U';   *(ptr+7) = 'A'; *(ptr+12) = 'K';
+    *(ptr+2) = 'H';   *(ptr+8) = 'J'; *(ptr+13) = 'A';
+    *(ptr+3) = 'A';   *(ptr+9) = 'A'; *(ptr+14) = 'R';
+    *(ptr+4) = 'N';   *(ptr+10) = 'S';
+    *(ptr+5) = ' ';
+}
+
+// Function to process Peek Command (Assume for now that the Peek Command is a valid Peek Command)
+void processPeek()
+{
+    write_some_data();  // put some data starting from 0x20000000 for debugging purposes
+    int i = 0,j=0,k=0;  // for indexing purposes
+    char addr_char[8]  ;
+    char* endptr;
+    char size_char[100]; int size_int;
+    while(console_cmd_buffer2[i] != '\0')
+    {
+        if(i>3 && i<14)
+        {
+            addr_char[j] = console_cmd_buffer2[i];
+            j = j + 1;
+        }
+        if(i>=14)
+        {
+            size_char[k] = console_cmd_buffer2[i];
+            k = k+1;
+        }
+        i = i+1;
+    }
+
+    unsigned int addr = strtol(addr_char,&endptr,16);
+    char* ptr = (char*)addr;
+
+    UARTCharPut(UART0_BASE, '\n');
+    UARTCharPut(UART0_BASE, '\r');
+    size_int = atoi(size_char);
+    for(int x = 1;x<=size_int;x++)
+    {
+        UARTCharPut(UART0_BASE, *(ptr));
+        ptr = ptr+1;
+    }
+    UARTCharPut(UART0_BASE, '\n');
+    UARTCharPut(UART0_BASE, '\r');
 }
 
 int main()
