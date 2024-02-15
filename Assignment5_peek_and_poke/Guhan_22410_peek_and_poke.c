@@ -41,6 +41,7 @@ void LCD_RecData();                  // Function to send necessary control signa
 void LCD_init();                     // Function to initialize the LCD
 void delay_1Ms_LCD_Starter();        // Delay used to send high to low pulse on PA7 (Enable Line of LCD)
 void processPeek();                  // Function to process Peek Command
+void processPoke();                  // Function to process Poke Command
 
 char console_cmd_buffer[30];      // global character array to store the contents given by the user
 char console_cmd_buffer2[30];     // global character array to store the contents given by the user without the spaces and the tabs
@@ -521,6 +522,7 @@ void processEnterKey()
     else if(strstr(console_cmd_buffer2, "stop"))     StartStopCommand_Console();   // Process Stop Command
     else if(strstr(console_cmd_buffer2, "start"))    StartStopCommand_Console();   // Process Start Command
     else if(strstr(console_cmd_buffer2, "peek"))     processPeek();                // Process Peek Command
+    else if(strstr(console_cmd_buffer2, "poke"))     processPoke();                // Process Poke Command
     else processInvalidCommand(); // Command with neither Color nor Blink has been entered => Give appropriate prompt to user to enter valid command
 
     /* Once Enter Key is pressed and Color and Blink Rate have been processed, empty the contents of the character array
@@ -583,7 +585,7 @@ void processInvalidCommand()
 
 void write_some_data()
 {
-    char* ptr = 0x20000000;
+    char* ptr = 0x2000000;
     *ptr     = 'G';   *(ptr+6) = 'R'; *(ptr+11) = 'E';
     *(ptr+1) = 'U';   *(ptr+7) = 'A'; *(ptr+12) = 'K';
     *(ptr+2) = 'H';   *(ptr+8) = 'J'; *(ptr+13) = 'A';
@@ -592,10 +594,57 @@ void write_some_data()
     *(ptr+5) = ' ';
 }
 
+void processPoke()
+{
+    // we need spaces in poke command to differentiate between number of bytes to write and the content to write
+    // Hence for processing poke command, the original buffer console_cmd_buffer[] is used and not console_cmd_buffer2[]
+    // For now the assumption is that a valid poke command is given by the user with only one space
+    // Later on space handling must be done
+    int i = 0,j=0,k=0,l=0;  // for indexing purposes
+    char addr_char[8];  // to store the starting address of Poke
+    char* endptr;       // will be used in strtol function
+    int read_flag = 1;     // 1 / 0 => read / don't read from the console
+    char size_char[100]; int size_int;
+    char poke_content[100];
+    while(console_cmd_buffer[i] != '\0')
+    {
+
+       if(i>4 && i<15)
+       {
+           addr_char[j] = console_cmd_buffer[i];  // storing the location to be poked in add_char[] array
+           j = j+1;
+       }
+       if(i == 16)
+           {
+               size_char[k] = console_cmd_buffer[i];
+               read_flag = 0;
+           }
+       if(read_flag == 0 && i>17)
+       {
+           poke_content[l] = console_cmd_buffer[i];
+           l = l + 1;
+       }
+       i = i+1;
+    }
+
+    size_int = atoi(size_char);   // storing the number of variables to be poked in an integer
+    unsigned int addr = strtol(addr_char,&endptr,16);  // starting address of the poke address in long format
+    char* ptr = (char*)addr;   // starting address of the poke content in char* format
+
+    UARTCharPut(UART0_BASE, '\n');
+    UARTCharPut(UART0_BASE, '\r');
+
+    for(int x=0;x<size_int;x++)
+    {
+        *ptr = poke_content[x];
+        ptr = ptr+1;
+    }
+
+}
 // Function to process Peek Command (Assume for now that the Peek Command is a valid Peek Command)
 void processPeek()
 {
-    write_some_data();  // put some data starting from 0x20000000 for debugging purposes
+//    write_some_data();  // put some data starting from 0x20000000 for debugging purposes
     int i = 0,j=0,k=0;  // for indexing purposes
     char addr_char[8]  ;
     char* endptr;
@@ -621,7 +670,7 @@ void processPeek()
     UARTCharPut(UART0_BASE, '\n');
     UARTCharPut(UART0_BASE, '\r');
     size_int = atoi(size_char);
-    for(int x = 1;x<=size_int;x++)
+    for(int x = 0;x<size_int;x++)
     {
         UARTCharPut(UART0_BASE, *(ptr));
         ptr = ptr+1;
