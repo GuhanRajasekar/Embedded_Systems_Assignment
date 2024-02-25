@@ -28,7 +28,7 @@ void delayMs(int n);                 // Software function to implement delay
 void processInvalidCommand();        // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
 void read_sw1();                     // Function to handle sw1 press
 void read_sw2();                     // Function to handle sw2 press
-void removeWhiteSpaces();            // Function to remove all the white spaces (space and tabs) entered in the command by the user
+void removeWhiteSpaces();            // White Spaces removed and all characters converted entered by the user are converted to lower case in this function
 void StartStopCommand_Console();     // Function to handle Start and Stop Commands given through console
 void StartStopCommand_Keypad();      // Function to handle Start and Stop Commands given through keypad
 void ResumePauseCommand_Console();   // Function to handle Resume and Pause Commands given through console
@@ -43,22 +43,24 @@ void delay_1Ms_LCD_Starter();        // Delay used to send high to low pulse on 
 void processPeek();                  // Function to process Peek Command
 void processPoke();                  // Function to process Poke Command
 
-char console_cmd_buffer[30];      // global character array to store the contents given by the user
-char console_cmd_buffer2[30];     // global character array to store the contents given by the user without the spaces and the tabs
-char val;                         // global character variable that is used across functions to read data from the console
-int id = 0;                       // global variable to take care of indexing of the character buffer array
-int Color = 0;                    // global variable to denote which color is currently active ( 0 indicates no color )
-int Color_Pause = 0;              // global variable to save the Color state when pause command is active
-int Blink_Delay = 250;            // global variable to store the blink delay
-int Blink_Delay_Pause = 250;      // global variable to save the blink delay before going into pause state
-int sw1_pressed = 0;              // flag to indicate if sw1 has been pressed
-int sw2_pressed = 0;              // flag to indicate if sw2 has been pressed
-int count_sw2 = 0;                // to keep track of the number of times SW2 was pressed
-int stop_flag =  0;               // 0/1 => Stop Command is  inactive / active
-int pause_flag = 0;               // 0/1 => Pause Command is inactive / active
-int num = 0;                      // This variable is used in ProcessKeyPress() function
-int key1_pressed_first_time = 0;  // 0/1 => Key 1 has not been pressed at all / Key 1 has been pressed
-int color_change = 0;            // Number of color changes that will be displayed on the first two seven segment displays, starting from the right
+char console_cmd_buffer[30];       // global character array to store the contents given by the user
+char console_cmd_buffer2[30];      // global character array to store the contents given by the user without the spaces and the tabs
+char val;                          // global character variable that is used across functions to read data from the console
+int id = 0;                        // global variable to take care of indexing of the character buffer array
+int Color = 0;                     // global variable to denote which color is currently active ( 0 indicates no color )
+int Color_Pause = 0;               // global variable to save the Color state when pause command is active
+int Blink_Delay = 250;             // global variable to store the blink delay
+int Blink_Delay_Pause = 250;       // global variable to save the blink delay before going into pause state
+int sw1_pressed = 0;               // flag to indicate if sw1 has been pressed
+int sw2_pressed = 0;               // flag to indicate if sw2 has been pressed
+int count_sw2 = 0;                 // to keep track of the number of times SW2 was pressed
+int stop_flag =  0;                // 0/1 => Stop Command is  inactive / active
+int pause_flag = 0;                // 0/1 => Pause Command is inactive / active
+int num = 0;                       // This variable is used in ProcessKeyPress() function
+int key1_pressed_first_time = 0;   // 0/1 => Key 1 has not been pressed at all / Key 1 has been pressed
+int color_change = 0;              // Number of color changes that will be displayed on the first two seven segment displays, starting from the right
+char poke_content[100];            // To store the content to be poked and displayed on LCD
+char version[15] = "Version 0.01"; // Character array to store the version number to be displayed on the LCD screen
 
 
 // Function to Initialize PortE of TIVA
@@ -87,8 +89,6 @@ void PortAB_INIT()
 {
     SYSCTL_RCGC2_R |= 0x00000003;       // enable clock to GPIOA, GPIOB at clock gating control register
     // Enable the GPIO pins
-    // For PORTB, all pins are used to set 7 segment display
-    // For PORTA, pins 7 to 4 are used for selecting one of the four 7 segment display
     GPIO_PORTA_DIR_R |= 0xF0;       // PA4 to PA7 set to output
     GPIO_PORTB_DIR_R |= 0xFF;       // PB0 to PB7 set to output
     // enable the GPIO pins for digital function
@@ -96,6 +96,7 @@ void PortAB_INIT()
     GPIO_PORTB_DEN_R |= 0xFF;       // enabling PB0 to PB8
 }
 
+// The function LCD_RecCommand() sets RS(PA6) = 0 and a high to low pulse on E pin(PA7). This will help us send commands to the LCD display
 void LCD_RecCommand()
 {
     GPIO_PORTA_DATA_R  &=  0xBF;  // Set PA6 to 0, keep other bits unaffected
@@ -104,11 +105,12 @@ void LCD_RecCommand()
     GPIO_PORTA_DATA_R  &=  0x7F;  // Set PA7 to 0, keep other bits unaffected
 }
 
+// The function LCD_RecData() sets RS(PA6) = 1 and a high to low pulse on E pin (PA7). This will help us send data to the LCD Display
 void LCD_RecData()
 {
     GPIO_PORTA_DATA_R  |=  0x40;  // Set PA6 to 1, keep other bits unaffected
     GPIO_PORTA_DATA_R  |=  0x80;  // Set PA7 to 1, keep other bits unaffected
-    delay_1Ms_LCD_Starter(); // Add some delay
+    delay_1Ms_LCD_Starter();      // Add some delay
     GPIO_PORTA_DATA_R  &=  0x7F;  // Set PA7 to 0, keep other bits unaffected
 }
 void LCD_init()
@@ -117,23 +119,30 @@ void LCD_init()
        Each time we load portB with necessary command, we need to send appropriate control
        signals to PORTA so that it can latch on to the data.
     */
-    GPIO_PORTB_DATA_R = 0x38; LCD_RecCommand();
-    GPIO_PORTB_DATA_R = 0x01; LCD_RecCommand();
-    GPIO_PORTB_DATA_R = 0x0F; LCD_RecCommand();
-    GPIO_PORTB_DATA_R = 0x80; LCD_RecCommand();
+    GPIO_PORTB_DATA_R = 0x38; LCD_RecCommand();   // 2 Lines and 5×7 character (8-bit data, D0 to D7)
+    GPIO_PORTB_DATA_R = 0x01; LCD_RecCommand();   // clear Display Screen
+    GPIO_PORTB_DATA_R = 0x0F; LCD_RecCommand();   // Display ON, Cursor Blinking
+    GPIO_PORTB_DATA_R = 0x80; LCD_RecCommand();   // Force Cursor to beginning of 1st Line
 }
 
-void LCD_PutData(char* data)
+void LCD_PutData(char* data,int size_int)
 {
+    /* Before writing data into LCD, we first need to clear the existing contents that are currently displayed on the LCD */
+    GPIO_PORTB_DATA_R = 0x01; LCD_RecCommand();   // clear Display Screen
+    GPIO_PORTB_DATA_R = 0x0F; LCD_RecCommand();   // Display ON, Cursor Blinking
+    GPIO_PORTB_DATA_R = 0x80; LCD_RecCommand();   // Force Cursor to beginning of 1st Line
+
     /*
        Each time we load portB with necessary data, we need to send appropriate control
        signals to PORTA so that it can latch on to the data.
     */
-    int i = 0;
-    while(data[i] != '\0')
+
+//    int i = 0;
+    for(int i = 0;i<size_int;i++)
     {
         GPIO_PORTB_DATA_R = data[i]; LCD_RecData();
-        i = i+1;
+        // i = i+1;
+        // Move to second line if first line is filled up
         if(i == 16)
         {
             GPIO_PORTB_DATA_R = 0xC0; // Force Cursor To Second Line
@@ -149,9 +158,10 @@ void removeWhiteSpaces()
     int i = 0,k=0;
     while(console_cmd_buffer[i] != '\0')
     {
+        
         if(!isspace(console_cmd_buffer[i]))
             {
-               console_cmd_buffer2[k] = console_cmd_buffer[i];
+               console_cmd_buffer2[k] = tolower(console_cmd_buffer[i]);
                k = k + 1;
             }
         i = i+1;
@@ -374,7 +384,7 @@ void processColors()
     return;
 }
 
-// Function to empty the Character Buffer Array
+// Function to  the Character Buffer Array
 void emptyBuffer()
 {
     console_cmd_buffer[0]  = '\0';  // Setting the first character as a null character => Emptying the contents of the character buffer array
@@ -511,7 +521,9 @@ void ResumePauseCommand_Keypad()
 // Function to handle Enter Key presses
 void processEnterKey()
 {
-    removeWhiteSpaces(); // Copy all the contents from console_cmd_buffer to console_cmd_buffer2 except the whitespaces ( spaces and tabs)
+    // Copy all the contents from console_cmd_buffer to console_cmd_buffer2 except the whitespaces ( spaces and tabs)
+    // Also all character in console_cmd_buffer are converted to lower case and stored in console_cmd_buffer2
+    removeWhiteSpaces(); 
 
     // Enter key has been pressed. Process the contents of the data entered
     // strstr() searches if the specified string is a subset of the contents of the character buffer array console_cmd_buffer
@@ -553,7 +565,7 @@ void processNormalKey()
      */
     if(id<=29) console_cmd_buffer[id] = (val);
     UARTCharPut(UART0_BASE, console_cmd_buffer[id]); // This makes the characters appear on the console (This is the Echo Operation)
-    console_cmd_buffer[id] = tolower(val);           // Convert everything to lower cases characters and store in the buffer array
+    // console_cmd_buffer[id] = tolower(val);           // Convert everything to lower cases characters and store in the buffer array
     id = id +1;
     if(id>=0 && id<=29)  console_cmd_buffer[id] = '\0'; // Terminate the array at a valid position
 }
@@ -600,12 +612,13 @@ void processPoke()
     // Hence for processing poke command, the original buffer console_cmd_buffer[] is used and not console_cmd_buffer2[]
     // For now the assumption is that a valid poke command is given by the user with only one space
     // Later on space handling must be done
+
     int i = 0,j=0,k=0,l=0;  // for indexing purposes
-    char addr_char[8];  // to store the starting address of Poke
-    char* endptr;       // will be used in strtol function
-    int read_flag = 1;     // 1 / 0 => read / don't read from the console
+    char addr_char[8];      // to store the starting address of the Poke content
+    char* endptr;           // will be used in strtol function
+    int read_flag = 1;      // 1 / 0 => read / don't read from the console
     char size_char[100]; int size_int;
-    char poke_content[100];
+    poke_content[0] = '\0';
     while(console_cmd_buffer[i] != '\0')
     {
 
@@ -627,20 +640,30 @@ void processPoke()
        i = i+1;
     }
 
-    size_int = atoi(size_char);   // storing the number of variables to be poked in an integer
-    unsigned int addr = strtol(addr_char,&endptr,16);  // starting address of the poke address in long format
-    char* ptr = (char*)addr;   // starting address of the poke content in char* format
+    size_int = atoi(size_char);                        // storing the number of variables to be poked in an integer
+    unsigned int addr = strtol(addr_char,&endptr,16);  // starting address of the poke address in long (integer of 8 bytes)format
+    char* ptr = (char*)addr;                           // starting address of the poke content in char* format
 
     UARTCharPut(UART0_BASE, '\n');
     UARTCharPut(UART0_BASE, '\r');
 
     for(int x=0;x<size_int;x++)
     {
-        *ptr = poke_content[x];
-        ptr = ptr+1;
+        *ptr = poke_content[x];    // writing the given contents in the specified memory location
+         ptr = ptr+1;
     }
 
+    /* If the starting address of the poke content is the same as the address in which we store Version 0.01,
+       then that content must be displayed on LCD
+     */
+//    if(ptr == version)
+//    {
+//        LCD_PutData(poke_content);
+//    }
+     LCD_PutData(poke_content,size_int);
+     return;
 }
+
 // Function to process Peek Command (Assume for now that the Peek Command is a valid Peek Command)
 void processPeek()
 {
@@ -697,7 +720,8 @@ int main()
 
     PortAB_INIT();                  /* Initialize Port A and Port B */
     LCD_init();
-    LCD_PutData("Version 0.01");
+    LCD_PutData(version,12);
+    test = 1;  // For debugging purposes
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
