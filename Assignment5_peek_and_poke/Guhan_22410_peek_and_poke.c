@@ -43,8 +43,8 @@ void delay_1Ms_LCD_Starter();        // Delay used to send high to low pulse on 
 void processPeek();                  // Function to process Peek Command
 void processPoke();                  // Function to process Poke Command
 
-char console_cmd_buffer[30];       // global character array to store the contents given by the user
-char console_cmd_buffer2[30];      // global character array to store the contents given by the user without the spaces and the tabs
+char console_cmd_buffer[50];       // global character array to store the contents given by the user
+char console_cmd_buffer2[50];      // global character array to store the contents given by the user without the spaces and the tabs
 char val;                          // global character variable that is used across functions to read data from the console
 int id = 0;                        // global variable to take care of indexing of the character buffer array
 int Color = 0;                     // global variable to denote which color is currently active ( 0 indicates no color )
@@ -561,11 +561,14 @@ void processNormalKey()
        We DO NOT perform the lower case conversion here as the characters entered by
        the users need to be printed without any modification
      */
-    if(id<=29) console_cmd_buffer[id] = (val);
-    UARTCharPut(UART0_BASE, console_cmd_buffer[id]); // This makes the characters appear on the console (This is the Echo Operation)
+    if(id<=39) console_cmd_buffer[id] = (val);
+    UARTCharPut(UART0_BASE, console_cmd_buffer[id]);    // This makes the characters appear on the console (This is the Echo Operation)
     // console_cmd_buffer[id] = tolower(val);           // Convert everything to lower cases characters and store in the buffer array
     id = id +1;
-    if(id>=0 && id<=29)  console_cmd_buffer[id] = '\0'; // Terminate the array at a valid position
+
+    // Buffer size has been increased to accomodate 40 characters given by the user
+    // This is done to display more content in LCD of EDU Arm Board
+    if(id>=0 && id<=39)  console_cmd_buffer[id] = '\0'; // Terminate the array at a valid position
 }
 
 
@@ -577,12 +580,15 @@ void processInvalidCommand()
         /* Here the if condition makes sure that that the prompt is not displayed when stop state is active */
         char* s  = "\n\n\rPlease enter any of the following commands:\n\r"
                          "1).Color <Color_Name>\n\r"
-                         "2).Blink <Blink_Rate>\n\r"
+                         "2).Blink <Blink_Rate> Valid numbers to be entered after 'blink' are 1,2,4,8,16,32\n\r"
                          "3).Start\n\r"
                          "4).Stop\n\r"
                          "5).Pause\n\r"
                          "6).Resume\n\r"
-                         "Valid numbers to be entered after 'blink' are 1,2,4,8,16,32\n\n\r";
+                         "7).Poke <Starting address in Hex> <Number of bytes to poke> <Content to poke>\n\r"
+                         "8).Peek <Starting address in Hex> <Number of bytes to peek>\n\r"
+                         "All the commands are Space insensitive except Peek and Poke\n\r"
+                         "Give proper spaces as mentioned in the prompt for Peek and Poke Commands";
         int i = 0; // for indexing purposes
         while(s[i] != '\0')
           {
@@ -619,16 +625,23 @@ void processPoke()
            addr_char[j] = console_cmd_buffer[i];  // storing the location to be poked in add_char[] array
            j = j+1;
        }
-       if(i == 16)
-           {
-               size_char[k] = console_cmd_buffer[i];
-               read_flag = 0;
-           }
-       if(read_flag == 0 && i>17)
+
+       if(read_flag == 0)
        {
-           poke_content[l] = console_cmd_buffer[i];
+           poke_content[l] = console_cmd_buffer[i];  // Read the contents to be poked
            l = l + 1;
        }
+
+       if( (i >= 16) && (read_flag == 1))
+           {
+               while(!isspace(console_cmd_buffer[i]))
+               {
+                   size_char[k] = console_cmd_buffer[i];
+                   k += 1;  // Increment the index of size_char
+                   i += 1;  // read the next character from  console_cmd_buffer
+                   read_flag = 0;
+               }
+           }
        i = i+1;
     }
 
