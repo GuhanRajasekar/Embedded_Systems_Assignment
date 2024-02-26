@@ -28,7 +28,7 @@ void delayMs(int n);                 // Software function to implement delay
 void processInvalidCommand();        // Forward Declaration of the function that gives direction to the suer when an invalid command has been entered
 void read_sw1();                     // Function to handle sw1 press
 void read_sw2();                     // Function to handle sw2 press
-void removeWhiteSpaces();            // White Spaces removed and all characters converted entered by the user are converted to lower case in this function
+void removeWhiteSpaces();            // Function to remove all the white spaces (space and tabs) entered in the command by the user
 void StartStopCommand_Console();     // Function to handle Start and Stop Commands given through console
 void StartStopCommand_Keypad();      // Function to handle Start and Stop Commands given through keypad
 void ResumePauseCommand_Console();   // Function to handle Resume and Pause Commands given through console
@@ -60,7 +60,7 @@ int num = 0;                       // This variable is used in ProcessKeyPress()
 int key1_pressed_first_time = 0;   // 0/1 => Key 1 has not been pressed at all / Key 1 has been pressed
 int color_change = 0;              // Number of color changes that will be displayed on the first two seven segment displays, starting from the right
 char poke_content[100];            // To store the content to be poked and displayed on LCD
-char version[15] = "Version 0.01"; // Character array to store the version number to be displayed on the LCD screen
+extern char version[30];           // Declaring here. For memory allocation, refer .lds file
 
 
 // Function to Initialize PortE of TIVA
@@ -158,7 +158,7 @@ void removeWhiteSpaces()
     int i = 0,k=0;
     while(console_cmd_buffer[i] != '\0')
     {
-        
+
         if(!isspace(console_cmd_buffer[i]))
             {
                console_cmd_buffer2[k] = tolower(console_cmd_buffer[i]);
@@ -521,9 +521,7 @@ void ResumePauseCommand_Keypad()
 // Function to handle Enter Key presses
 void processEnterKey()
 {
-    // Copy all the contents from console_cmd_buffer to console_cmd_buffer2 except the whitespaces ( spaces and tabs)
-    // Also all character in console_cmd_buffer are converted to lower case and stored in console_cmd_buffer2
-    removeWhiteSpaces(); 
+    removeWhiteSpaces(); // Copy all the contents from console_cmd_buffer to console_cmd_buffer2 except the whitespaces ( spaces and tabs)
 
     // Enter key has been pressed. Process the contents of the data entered
     // strstr() searches if the specified string is a subset of the contents of the character buffer array console_cmd_buffer
@@ -595,17 +593,6 @@ void processInvalidCommand()
     return;
 }
 
-void write_some_data()
-{
-    char* ptr = 0x2000000;
-    *ptr     = 'G';   *(ptr+6) = 'R'; *(ptr+11) = 'E';
-    *(ptr+1) = 'U';   *(ptr+7) = 'A'; *(ptr+12) = 'K';
-    *(ptr+2) = 'H';   *(ptr+8) = 'J'; *(ptr+13) = 'A';
-    *(ptr+3) = 'A';   *(ptr+9) = 'A'; *(ptr+14) = 'R';
-    *(ptr+4) = 'N';   *(ptr+10) = 'S';
-    *(ptr+5) = ' ';
-}
-
 void processPoke()
 {
     // we need spaces in poke command to differentiate between number of bytes to write and the content to write
@@ -618,7 +605,12 @@ void processPoke()
     char* endptr;           // will be used in strtol function
     int read_flag = 1;      // 1 / 0 => read / don't read from the console
     char size_char[100]; int size_int;
-    poke_content[0] = '\0';
+
+    for(int index = 0; index < sizeof(poke_content) ; index++)
+    {
+        poke_content [index] = '\0';   // Empty out the contents of poke_content array before filling it with data (To get rid of stale data)
+    }
+
     while(console_cmd_buffer[i] != '\0')
     {
 
@@ -642,25 +634,23 @@ void processPoke()
 
     size_int = atoi(size_char);                        // storing the number of variables to be poked in an integer
     unsigned int addr = strtol(addr_char,&endptr,16);  // starting address of the poke address in long (integer of 8 bytes)format
-    char* ptr = (char*)addr;                           // starting address of the poke content in char* format
+    char* ptr1 = (char*)addr;                           // starting address of the poke content in char* format
+    char* ptr2 = ptr1;                                  // we use ptr2 to display the poke content on LCD because ptr1 will be incremented while populating poke_content array
 
     UARTCharPut(UART0_BASE, '\n');
     UARTCharPut(UART0_BASE, '\r');
 
     for(int x=0;x<size_int;x++)
     {
-        *ptr = poke_content[x];    // writing the given contents in the specified memory location
-         ptr = ptr+1;
+        *ptr1 = poke_content[x];    // writing the given contents in the specified memory location
+         ptr1 = ptr1+1;
     }
 
-    /* If the starting address of the poke content is the same as the address in which we store Version 0.01,
-       then that content must be displayed on LCD
-     */
-//    if(ptr == version)
-//    {
-//        LCD_PutData(poke_content);
-//    }
-     LCD_PutData(poke_content,size_int);
+    /*
+       If the poke address is the same as the address of "Version 0.01" then we display that content on LCD
+       Right now , the  address of "Version 0.01" is 0x20004000. Hence we check if ptr is the same as 0x20004000. If so we will display the contents on LCD
+    */
+    if(ptr2 == version) LCD_PutData(poke_content,size_int);
      return;
 }
 
@@ -719,9 +709,10 @@ int main()
     GPIOC_INIT();                    /* Initialize Port C */
 
     PortAB_INIT();                  /* Initialize Port A and Port B */
+    strcpy(version,"Version 0.01");    /* Initialization of the contents to be displayed on LCD */
     LCD_init();
     LCD_PutData(version,12);
-    test = 1;  // For debugging purposes
+
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
