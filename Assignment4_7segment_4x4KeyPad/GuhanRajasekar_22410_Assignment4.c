@@ -141,20 +141,24 @@ int findBlinkRate()
 // Function to take care of sw1 press
 void read_sw1()
 {
-    sw1_pressed = 0;
-    int current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;      // read the status of sw1
-    if((current_state_sw1) == 0x00)
+    // sw1 reading must take place only when both pause and stop states are inactive
+    if(pause_flag == 0 && stop_flag == 0)
     {
-        while(current_state_sw1 == 0x00)
+        sw1_pressed = 0;
+        int current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;      // read the status of sw1
+        if((current_state_sw1) == 0x00)
         {
-            current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;  // read the data from sw1 again
-            if(current_state_sw1 == 0x10)
+            while(current_state_sw1 == 0x00)
             {
-                sw1_pressed = 1;                           // consider sw1 to be pressed
-                color_change += 1;                         // number of color changes will be displayed on the first two SSDs from the left
-                Color = Color + 1;
-                if(Color == 8) Color = 1;
-                break;
+                current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;  // read the data from sw1 again
+                if(current_state_sw1 == 0x10)
+                {
+                    sw1_pressed = 1;                           // consider sw1 to be pressed
+                    color_change += 1;                         // number of color changes will be displayed on the first two SSDs from the left
+                    Color = Color + 1;
+                    if(Color == 8) Color = 1;
+                    break;
+                }
             }
         }
     }
@@ -163,37 +167,40 @@ void read_sw1()
 
 void read_sw2()
 {
-    int current_state_sw2 = GPIO_PORTF_DATA_R & 0x01;   // read the status of sw2
-    sw2_pressed = 0;
-    if(current_state_sw2 == 0x00)
+    if(pause_flag == 0 && stop_flag == 0)
     {
-        while(current_state_sw2 == 0x00)
+        int current_state_sw2 = GPIO_PORTF_DATA_R & 0x01;   // read the status of sw2
+        sw2_pressed = 0;
+        if(current_state_sw2 == 0x00)
         {
-            current_state_sw2 = GPIO_PORTF_DATA_R & 0x01;  // read the data from sw2 again
-            if(current_state_sw2 == 0x01)                     // If value is still 0, consider sw2 to be pressed.
+            while(current_state_sw2 == 0x00)
             {
-                sw2_pressed = 1;                           // consider sw2 to be pressed
-                count_sw2 = count_sw2 + 1;                 // increment the count value of sw2 press to increase the blink speed of the LED
-                if(count_sw2 == 7) count_sw2 = 1;
-                switch(count_sw2)
+                current_state_sw2 = GPIO_PORTF_DATA_R & 0x01;  // read the data from sw2 again
+                if(current_state_sw2 == 0x01)                     // If value is still 0, consider sw2 to be pressed.
                 {
-                   case 1: Blink_Delay = 125;   // blink 2 times in two seconds  => blink once in 1 second
-                           break;
+                    sw2_pressed = 1;                           // consider sw2 to be pressed
+                    count_sw2 = count_sw2 + 1;                 // increment the count value of sw2 press to increase the blink speed of the LED
+                    if(count_sw2 == 7) count_sw2 = 1;
+                    switch(count_sw2)
+                    {
+                    case 1: Blink_Delay = 125;   // blink 2 times in two seconds  => blink once in 1 second
+                            break;
 
-                   case 2: Blink_Delay = 62.5;    // blink 4 times in two seconds  => blink 2 times in 1 second
-                           break;
+                    case 2: Blink_Delay = 62.5;    // blink 4 times in two seconds  => blink 2 times in 1 second
+                            break;
 
-                   case 3: Blink_Delay = 31.25;  // blink 8 times in two seconds  => blink 4 times in 1 second
-                           break;
+                    case 3: Blink_Delay = 31.25;  // blink 8 times in two seconds  => blink 4 times in 1 second
+                            break;
 
-                   case 4: Blink_Delay = 15.625;  // blink 16 times in two seconds => blink 8 times in 1 second
-                           break;
+                    case 4: Blink_Delay = 15.625;  // blink 16 times in two seconds => blink 8 times in 1 second
+                            break;
 
-                   case 5: Blink_Delay = 7.8125;  // blink 32 times in two seconds => blink 16 times in one second => MAX SPEED (LED Constantly On)
-                           break;
+                    case 5: Blink_Delay = 7.8125;  // blink 32 times in two seconds => blink 16 times in one second => MAX SPEED (LED Constantly On)
+                            break;
 
-                   case 6: Blink_Delay = 250;   // After max speed switch back to blinking once in 2 seconds  (This is the lowest speed)
-                           break;
+                    case 6: Blink_Delay = 250;   // After max speed switch back to blinking once in 2 seconds  (This is the lowest speed)
+                            break;
+                    }
                 }
             }
         }
@@ -347,6 +354,7 @@ void StartStopCommand_Console()
     /* Although key1 is not pressed when this function is called, we still set this flag to 1.
        This is to maintain continuity in toggling between on and off states through both console and key 1 of 4x4 keypad
     */
+    pause_flag = 0;  // Diable the pause resume feature as stop and start has higher precedence
     key1_pressed_first_time = 1;
     if(strcmp(console_cmd_buffer,"start") == 0)
     {
@@ -369,6 +377,7 @@ void StartStopCommand_Console()
 // Function to handle Start and Stop Commands that is given through key1 of 4x4 keypad
 void StartStopCommand_Keypad()
 {
+    pause_flag = 0;  // Diable the pause resume feature as stop and start has higher precedence
     int key1 = processKeyPress();
     if(key1== 1)
     {
@@ -388,7 +397,7 @@ void StartStopCommand_Keypad()
                  key1_pressed_first_time = 1;
                  color_change = 1;                // Start of system indicates first color (green)
                  Color = 1;                       // Set color to green
-                 Blink_Delay = 250;              // Set speed to the lowest speed
+                 Blink_Delay = 250;               // Set speed to the lowest speed
                  stop_flag = 0;                   // Set stop feature to inactive
                  return;
               }
