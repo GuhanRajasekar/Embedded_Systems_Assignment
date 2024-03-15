@@ -450,8 +450,8 @@ void processSSD(int ssd)
    // Display the DOT as well
    if(ssd == 3)
    {
-      GPIO_PORTA_DATA_R     = 0x20;
-      GPIO_PORTB_DATA_R += 0x80 ;
+      GPIO_PORTA_DATA_R     = 0x20; // Select the third SSD from the left
+      GPIO_PORTB_DATA_R    |= 0x80; // Display the numbers as well as the DOT
    }
 
    return;
@@ -462,8 +462,15 @@ void SSD_Display_Handler()
     // time_elapsed is incremented in SysTick_Handler() function which is once in every 100ms (0.1s)
     // Another way of saying it is time_elapsed is incremented once for every 100ms (0.1s)
 
-    processSSD(1);
-    delaySSD();
+    // Do NOT display 0 in the left most SSD.
+    // Because this leads to issues when we are displaying things in the LCD
+    // Hence display valuen in the left most SSD only when seconds >= 100
+    if(seconds >= 100)
+    {
+        processSSD(1);
+        delaySSD();
+    }
+
 
     processSSD(2);
     delaySSD();
@@ -471,8 +478,8 @@ void SSD_Display_Handler()
     processSSD(3);
     delaySSD();
 
-   processSSD(4);
-   delaySSD();
+    processSSD(4);
+    delaySSD();
 
 
 }
@@ -542,24 +549,22 @@ void emptyBuffer()
 // Function to handle Start and Stop Commands that is given through console
 void StartStopCommand_Console()
 {
-    /* Although key1 is not pressed when this function is called, we still set this flag to 1.
-       This is to maintain continuity in toggling between on and off states through both console and key 1 of 4x4 keypad
-    */
-    pause_flag = 0; // reset the pause state as the start/stop command will have higher precedence
-    key1_pressed_first_time = 1;
-    if(strcmp(console_cmd_buffer,"start") == 0)
+
+    pause_flag = 0;
+    if(strcmp(console_cmd_buffer2,"timerstart") == 0)
     {
         Color = 1;              // Set color to green
-        color_change = 1;       // Start of system indicates first color (green)
-        Blink_Delay = 250;     // Set delay to the least value
-        stop_flag = 0;          // 0 indicates that the stop feature is not active
+        Blink_Delay = 50;       // Set delay to the least value
+        stop_flag = 0;          // System in START state
         return;
     }
-    else if(strcmp(console_cmd_buffer,"stop") == 0)
+    else if(strcmp(console_cmd_buffer2,"timerstop") == 0)
     {
-        Color = 0;         // Set Color to No Color
-        color_change = 0;  // Stop of system indicates no color is active
-        stop_flag = 1;     // 1 indicates that stop feature is active
+        Color = 1;
+        Blink_Delay = 1;  // Good enough to keep the LED continuosly ON
+        time_elapsed = 0; // Reset the count value
+        seconds      = 0; // Reset the count value
+        stop_flag = 1;    // System in STOP state
         return;
     }
     else return;
@@ -608,27 +613,33 @@ void StartStopCommand_Keypad()
 // Function to handle Resume and Pause Commands
 void ResumePauseCommand_Console()
 {
-    /* Here the pause_flag == 0 check will make sure that in the case of user entering multiple
-       pause commands continuously, only the first pause command is considered
-    */
-    if(    (strcmp(console_cmd_buffer2, "pause") == 0)
-        && (pause_flag == 0)
-      )
+
+    /*
+     Handle Pause and Resume Commands only when the system is NOT in the STOP state
+     */
+    if(stop_flag == 0)
     {
-       // Save the Color and Blink Delay before going into pause state
-       // Once state of the color is saved , set color to No color
-       pause_flag  = 1;   // to indicate that pause state is active
-       Color_Pause = Color;
-       Blink_Delay_Pause = Blink_Delay;
-       Color = 0;
-       return;
-    }
-    if((strcmp(console_cmd_buffer2 , "resume") == 0))
-    {
-        pause_flag = 0;
-        Color = Color_Pause;
-        Blink_Delay = Blink_Delay_Pause;
-        return;
+        /* Here the pause_flag == 0 check will make sure that in the case of user entering multiple
+           pause commands continuously, only the first pause command is considered
+        */
+        if(    (strcmp(console_cmd_buffer2, "timerpause") == 0)
+            && (pause_flag == 0)
+          )
+        {
+           // Save the Color and Blink Delay before going into pause state
+           // Once state of the color is saved , set color to No color
+           pause_flag  = 1;   // System in PAUSE state
+           Color       = 2;   // Blue in pause state
+           Blink_Delay = 50;  // Just a random number chosen as delay for the Systick Assignment
+           return;
+        }
+        if((strcmp(console_cmd_buffer2 , "timerresume") == 0))
+        {
+            pause_flag = 0;    // System in RESUME state
+            Color = 1;         // Green color in resume state
+            Blink_Delay = 50;  // Just a random number chosen as delay for the Systick Assignment
+            return;
+        }
     }
     return;
 }
@@ -674,14 +685,19 @@ void processEnterKey()
 
     // Enter key has been pressed. Process the contents of the data entered
     // strstr() searches if the specified string is a subset of the contents of the character buffer array console_cmd_buffer
-    if     ( (strstr(console_cmd_buffer2, "color" )) && (stop_flag == 0) && (pause_flag == 0))  Color       = findColor();      // Find out which color is requested
-    else if( (strstr(console_cmd_buffer2, "blink" )) && (stop_flag == 0) && (pause_flag == 0))  Blink_Delay = findBlinkRate();  // Find out the blink rate
-    else if( (strstr(console_cmd_buffer2, "pause" )) && (stop_flag == 0))  ResumePauseCommand_Console();  // Process Pause Command
-    else if( (strstr(console_cmd_buffer2, "resume")) && (stop_flag == 0))  ResumePauseCommand_Console(); // Process Resume Command
-    else if(strstr(console_cmd_buffer2, "stop"))     StartStopCommand_Console();   // Process Stop Command
-    else if(strstr(console_cmd_buffer2, "start"))    StartStopCommand_Console();   // Process Start Command
+//    if     ( (strstr(console_cmd_buffer2, "color" )) && (stop_flag == 0) && (pause_flag == 0))  Color       = findColor();      // Find out which color is requested
+//    else if( (strstr(console_cmd_buffer2, "blink" )) && (stop_flag == 0) && (pause_flag == 0))  Blink_Delay = findBlinkRate();  // Find out the blink rate
+//    else if( (strstr(console_cmd_buffer2, "pause" )) && (stop_flag == 0))  ResumePauseCommand_Console();  // Process Pause Command
+//    else if( (strstr(console_cmd_buffer2, "resume")) && (stop_flag == 0))  ResumePauseCommand_Console(); // Process Resume Command
+//    else if(strstr(console_cmd_buffer2, "stop"))     StartStopCommand_Console();   // Process Stop Command
+//    else if(strstr(console_cmd_buffer2, "start"))    StartStopCommand_Console();   // Process Start Command
 //    else if(strstr(console_cmd_buffer2, "peek"))     processPeek();                // Process Peek Command
 //    else if(strstr(console_cmd_buffer2, "poke"))     processPoke();                // Process Poke Command
+
+    if       (strcmp(console_cmd_buffer2 , "timerstop" )  == 0) StartStopCommand_Console();    // Process Timer Stop Command
+    else if  (strcmp(console_cmd_buffer2 , "timerstart")  == 0) StartStopCommand_Console();    // Process Timer Start Command
+    else if  (strcmp(console_cmd_buffer2 , "timerpause")  == 0) ResumePauseCommand_Console();  // Process Timer Pause Command
+    else if  (strcmp(console_cmd_buffer2 , "timerresume") == 0) ResumePauseCommand_Console();  // Process Timer Resume Command
     else processInvalidCommand(); // Command with neither Color nor Blink has been entered => Give appropriate prompt to user to enter valid command
 
     /* Once Enter Key is pressed and Color and Blink Rate have been processed, empty the contents of the character array
@@ -728,16 +744,10 @@ void processInvalidCommand()
     {
         /* Here the if condition makes sure that that the prompt is not displayed when stop state is active */
         char* s  = "\n\n\rPlease enter any of the following commands:\n\r"
-                         "1).Color <Color_Name>\n\r"
-                         "2).Blink <Blink_Rate> Valid numbers to be entered after 'blink' are 1,2,4,8,16,32\n\r"
-                         "3).Start\n\r"
-                         "4).Stop\n\r"
-                         "5).Pause\n\r"
-                         "6).Resume\n\r"
-                         "7).Poke <Starting address in Hex> <Number of bytes to poke> <Content to poke>\n\r"
-                         "8).Peek <Starting address in Hex> <Number of bytes to peek>\n\r"
-                         "All the commands are Space insensitive except Peek and Poke\n\r"
-                         "Give proper spaces as mentioned in the prompt for Peek and Poke Commands";
+                         "1). Timer Start\n\r"
+                         "2). Timer Stop\n\r"
+                         "3). Timer Pause\n\r"
+                         "4). Timer Resume\n\r";
         int i = 0; // for indexing purposes
         while(s[i] != '\0')
           {
@@ -880,9 +890,11 @@ void SysTick_Handler(void)
        else
        {
            Color = 1;
-           Blink_Delay = 50;
+           Blink_Delay = 50;  // No reason behind 50. Just a number I have chosen for the Systick Assignment
        }
 
+       // SysTick_Handler() is called for every 100ms.
+       // So when we set sw1_delay to 5 => We are allowing a time of 500ms between accepting sw1 presses
        sw1_delay += 1;
        if(sw1_delay == 5) sw1_pressed = 0; // Start accepting further interrupts
 
@@ -895,8 +907,11 @@ void SysTick_Handler(void)
        if(pause_flag == 1) Color = 2;  // Blink Blue in PAUSE state
        // RESUME state is active
        else Color = 1;                 // Blink Green in RESUME state
-       Blink_Delay = 50;               // Maintain the same blink delay in pause and resume states
+       Blink_Delay = 50;               // No reason behind 50. Just a number I have chosen for the Systick Assignment
        sw2_delay += 1;
+
+       // SysTick_Handler() is called for every 100ms.
+       // So when we set sw2_delay to 5 => We are allowing a time of 500ms between accepting sw2 presses
        if(sw2_delay == 5) sw2_pressed = 0; // Start accepting further interrupts
    }
 
@@ -946,7 +961,7 @@ void GPIO_PORTF_Handler()
         }
     }
 
-    // clear the interrupt flags
+    // clear the interrupt flags (Necessary for the interrupts to work properly)
     GPIO_PORTF_ICR_R = 0x11;
     return;
 }
