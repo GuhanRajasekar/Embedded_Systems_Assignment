@@ -71,6 +71,8 @@ char poke_content[100];            // To store the content to be poked and displ
 extern char version[30];           // Declaring here. For memory allocation, refer .lds file
 int time_elapsed = 0;              // Number to be displayed on the SSD (Updated using Systick_Handler)
 int seconds = 0;                   // Time elapsed in seconds (To be displayed on the first 3 SSDs)
+int curr_state = 0;                // 0/1/2 -> Ready / Running / Pause
+int prev_state = 0;                // 0/1/2 -> Ready / Running / Pause
 
 
 
@@ -556,6 +558,7 @@ void StartStopCommand_Console()
         Color = 1;              // Set color to green
         Blink_Delay = 50;       // Set delay to the least value
         stop_flag = 0;          // System in START state
+        curr_state = 1;
         return;
     }
     else if(strcmp(console_cmd_buffer2,"timerstop") == 0)
@@ -565,6 +568,7 @@ void StartStopCommand_Console()
         time_elapsed = 0; // Reset the count value
         seconds      = 0; // Reset the count value
         stop_flag = 1;    // System in STOP state
+        curr_state = 0;
         return;
     }
     else return;
@@ -631,6 +635,7 @@ void ResumePauseCommand_Console()
            pause_flag  = 1;   // System in PAUSE state
            Color       = 2;   // Blue in pause state
            Blink_Delay = 50;  // Just a random number chosen as delay for the Systick Assignment
+           curr_state = 2;    // Flag to indicate PAUSE state for setting appropriate text on LCD
            return;
         }
         if((strcmp(console_cmd_buffer2 , "timerresume") == 0))
@@ -638,6 +643,7 @@ void ResumePauseCommand_Console()
             pause_flag = 0;    // System in RESUME state
             Color = 1;         // Green color in resume state
             Blink_Delay = 50;  // Just a random number chosen as delay for the Systick Assignment
+            curr_state = 1;  // Flag to indicate RESUME state for setting appropriate text on LCD
             return;
         }
     }
@@ -927,6 +933,15 @@ void SysTick_Handler(void)
            seconds += 1;
        }
    }
+
+   // Update LCD only when state changes
+   if(curr_state != prev_state)
+   {
+        prev_state = curr_state;
+        if(curr_state == 0)       LCD_PutData("Timer Ready",11);
+        else if(curr_state == 1)  LCD_PutData("Timer Running",13);
+        else                      LCD_PutData("Timer Paused",12);
+   }
 }
 
 void GPIO_PORTF_Handler()
@@ -938,11 +953,16 @@ void GPIO_PORTF_Handler()
          sw1_delay   = 0;   // Start the delay for to avoid de-bouncing issues in sw1. This variable will be incremented in the SysTick_Handler() function.
 
          // Toggle between start and stop state
-         if(stop_flag == 0) stop_flag = 1; // STOP  state is active
+         if(stop_flag == 0)
+             {
+                     stop_flag  = 1; // STOP  state is active
+                     curr_state = 0; // READY (STOP)
+             }
          else
              {
                  stop_flag  = 0; // START state is active
                  pause_flag = 0; // De-activate PAUSE flag if it was active before
+                 curr_state = 1; // Running (START , RESUME)
              }
     }
 
@@ -956,10 +976,19 @@ void GPIO_PORTF_Handler()
             sw2_delay   = 0; // Start the delay for to avoid de-bouncing issues in sw2
 
             // Toggle between pause and resume state
-            if(pause_flag == 0) pause_flag = 1; // PAUSE  state is active
-            else                pause_flag = 0; // RESUME state is active
+            if(pause_flag == 0)
+                {
+                   pause_flag = 1; // PAUSE  state is active
+                   curr_state = 2; // PAUSE
+                }
+            else
+                {
+                  pause_flag = 0; // RESUME state is active
+                  curr_state = 1; // RUNNING (RESUME)
+                }
         }
     }
+
 
     // clear the interrupt flags (Necessary for the interrupts to work properly)
     GPIO_PORTF_ICR_R = 0x11;
@@ -984,8 +1013,8 @@ int main()
 
 
 //    strcpy(version,"Version 0.01");    /* Initialization of the contents to be displayed on LCD */
-//    LCD_init();
-//    LCD_PutData(version,12);
+    LCD_init();
+    LCD_PutData("Timer Ready",11);
 
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
