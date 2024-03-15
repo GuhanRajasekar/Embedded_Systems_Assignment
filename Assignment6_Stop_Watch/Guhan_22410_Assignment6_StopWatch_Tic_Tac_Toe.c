@@ -21,7 +21,7 @@
 #define COLOR_WHITE_ON     0x0E  // B + R + G
 #define NO_COLOR           0x00  // No color
 
-void GPIO_setup();                   // Fnuction to initialize the necessary ports required for Systick Timer Assignment
+void GPIO_setup();                   // Function to initialize the necessary ports required for Systick Timer Assignment
 void GPIOE_INIT();                   // Function to Initialize Port E of TIVA
 void GPIOC_INIT();                   // Function to Initialize Port C of TIVA
 void GPIOF_INIT();                   // Function to Initialize Port F of TIVA
@@ -35,7 +35,8 @@ void StartStopCommand_Console();     // Function to handle Start and Stop Comman
 void StartStopCommand_Keypad();      // Function to handle Start and Stop Commands given through keypad
 void ResumePauseCommand_Console();   // Function to handle Resume and Pause Commands given through console
 void ResumePauseCommand_Keypad();    // Function to handle Resume and Pause Commands given through keypad
-int  processKeyPress();              // Function to check if any one of the keys in the 4x4 keypad was pressed
+int  detectKeyPress();               // Function to detect if any one of the keys in the 4x4 keypad was pressed
+int  processKeyPress();              // Function to check which one of the keys in the 4x4 keypad was pressed
 void processSSD(int);                // Function to handle display of numbers in SSD (Seven Segment Display)
 void delaySSD(void);                 // Function to insert some delay between the glowing of various LEDs
 void SSD_Display_Handler();          // Function to handle display of numbers in SSD with delay in between various SSDs
@@ -47,6 +48,9 @@ void processPeek();                  // Function to process Peek Command
 void processPoke();                  // Function to process Poke Command
 void EnableInterrupts(void);         // Function to enable interrupts
 void systick_setup(void);            // Function to initialize the Systick Timer
+void gameArray_init(void);           // Function to initialize the Character array that will be used to play tic tac toe
+void print_game_status(void);        // Function to print the 3x3 matrix of the tic tac toe game
+void check_game_status(void);        // Function to check the status of the tic tac toe game and to give the necessary verdict
 
 char console_cmd_buffer[50];       // global character array to store the contents given by the user
 char console_cmd_buffer2[50];      // global character array to store the contents given by the user without the spaces and the tabs
@@ -73,7 +77,10 @@ int time_elapsed = 0;              // Number to be displayed on the SSD (Updated
 int seconds = 0;                   // Time elapsed in seconds (To be displayed on the first 3 SSDs)
 int curr_state = 0;                // 0/1/2 -> Ready / Running / Pause
 int prev_state = 0;                // 0/1/2 -> Ready / Running / Pause
-
+char game[4][4];                   // Array to hold the contents of the tic tac toe game
+int moves = 0;                     // Global variable to keep track of the number of moves played in the tic tac toe game
+int tic_tac_toe_row[] = {3,0,0,0, 3,1,1,1, 3,2,2,2, 3,3,3,3};  // Used for indexing purposes in tic tac toe game
+int tic_tac_toe_col[] = {3,0,1,2, 3,0,1,2, 3,0,1,2, 3,3,3,3};  // Used for indexing purposes in tic tac toe game
 
 
 void GPIO_setup()
@@ -110,6 +117,22 @@ void GPIO_setup()
     // set interrupt priority = 5 for PORTF
     NVIC_PRI7_R = (NVIC_PRI7_R & 0xFF00FFFF) | 0x00A00000;
     NVIC_EN0_R = 0x40000000;        // NVIC enabled for PORTF (IRQ number = 30)
+
+
+    // Initializing PORT E  for 4x4 Keypad Interfacing
+    SYSCTL_RCGC2_R    |= 0x00000010 ;       /* Enable clock to GPIO_E_ at clock gating control register */
+    SYSCTL_RCGCGPIO_R |= 0x00000010 ;       /* Enable and provide a clock to GPIO Port_E_ in Run mode */
+    GPIO_PORTE_DIR_R  |= 0x0F ;             /*  GPIO Direction | 0 -> INPUT | 1 -> OUTPUT  (We are configuring PORTE as output and connecting it to rows of 4x4 Keypad)*/
+    GPIO_PORTE_DEN_R  |= 0x0F;              /* enable the GPIO pins for digital function */
+    GPIO_PORTE_DATA_R  = 0x00 ;             /* Initializing PORTE Data to all 0s*/
+
+    // Initializing PORT C for 4x4  KeyPad Interfacing
+    SYSCTL_RCGC2_R    |= 0x00000004 ;       /* Enable clock to GPIO_C_ at clock gating control register */
+    SYSCTL_RCGCGPIO_R |= 0x00000004 ;       /* Enable and provide a clock to GPIO Port_C_ in Run mode */
+    GPIO_PORTC_DIR_R  &= ~ 0xF0 ;           /*  GPIO Direction | 0 -> INPUT | 1 -> OUTPUT (We are configuring PORTC as input and connecting it to columns of 4x4 Keypad)*/
+    GPIO_PORTC_ODR_R |= 0xF0 ;              /* 1 -> The corresponding pin is configured as open drain */
+    GPIO_PORTC_DEN_R |= 0xF0;               /* enable the GPIO pins for digital function */
+    GPIO_PORTC_PUR_R |= 0xF0 ;              /* 1 -> The corresponding pin's weak pull-up resistor is enabled */
 }
 
 void GPIOAB_INIT()
@@ -195,6 +218,72 @@ void systick_setup()
     NVIC_ST_CTRL_R = 7;
 }
 
+// Function to initialize the character array that will be used for playing tic tac toe
+void gameArray_init()
+{
+   for(int i=0;i<4;i++)
+   {
+       for(int j=0;j<4;j++)
+       {
+           game[i][j] = '-';
+       }
+   }
+}
+
+void print_game_status()
+{
+    UARTCharPut(UART0_BASE,'\n'); // Start from the next line
+    UARTCharPut(UART0_BASE,'\r'); // Start from the extreme left
+    for(int i=0;i<3;i++)
+    {
+        for(int j=0;j<3;j++)
+        {
+            UARTCharPut(UART0_BASE,game[i][j]);
+            UARTCharPut(UART0_BASE,' ');
+        }
+        UARTCharPut(UART0_BASE,'\n'); // Start from the next line
+        UARTCharPut(UART0_BASE,'\r'); // Start from the extreme left
+    }
+    return;
+}
+
+void print_invalid_move()
+{
+    char* s  = "\n\nInvalid Move\n\r";
+    int i = 0; // for indexing purposes
+    while(s[i] != '\0')
+      {
+         UARTCharPut(UART0_BASE, s[i]);
+         i = i+1;
+      }
+    return;
+}
+
+void check_game_status()
+{
+   int row = 0,col=0;
+   num = processKeyPress();            // Identify which key was pressed in the 4x4 keypad
+   if(num != -1) row = tic_tac_toe_row[num];     // Get the row    index corresponding to the key press of the 4x4 keypad
+   if(num != -1) col = tic_tac_toe_col[num];     // Get the column index corresponding to the key press of the 4x4 keypad
+
+   while(detectKeyPress() != -1)
+   {
+       // Stay in this loop to handle the case where the switch is pressed for a long time before releasing
+   }
+   // Some delay to overcome debouncing issue
+   for(int i=0;i<80;i++) delaySSD();
+
+   if((game[row][col] == 'X') || (game[row][col] == 'O')) print_invalid_move();  // Place already used. Hence it is an invalid move
+   else
+    {
+       game[row][col] = (moves%2 == 0) ? 'X' : 'O'; // To alternate between X and O
+       moves += 1; // Increment the number of moves so that the other guy can enter his/her move the next time
+    }
+
+       print_game_status(); // After every entry , print the status of the game
+
+   return;
+}
 // The function LCD_RecCommand() sets RS(PA6) = 0 and a high to low pulse on E pin(PA7). This will help us send commands to the LCD display
 void LCD_RecCommand()
 {
@@ -369,32 +458,40 @@ void read_sw2()
    return;
 }
 
+// Function for key Press Detection
+int detectKeyPress()
+{
+    GPIO_PORTE_DATA_R = 0x00 ;   // Drive all the rows of the 4x4 keypad low
+
+    if( (GPIO_PORTC_DATA_R & 0xF0) != 0xF0 )
+        return 1;    // Data in (PC7 - PC4) != 1111  => Some key was pressed
+    else
+        return -1;    // Data in (PC7 - PC4)  = 1111 => No key was pressed
+}
 
 // Function for Key Press Identification
 int processKeyPress()
 {
-        int row = 0, col = 0;
-        for(row = 0; row < 2; row ++)
+        int row = 0;
+        for(row = 0; row < 3; row ++)
         {
-//            GPIO_PORTE_DATA_R = ( 0x0F & ~(1 << row) );  // Driving one row low at a time
-            if(row == 0)   GPIO_PORTE_DATA_R = 0x0E     ; // Driving PE0 low
-            else           GPIO_PORTE_DATA_R = 0x0D;      // Driving PE1 low
+            if(row == 0)         GPIO_PORTE_DATA_R = 0x0E;      // Driving PE0 low
+            else if(row == 1)    GPIO_PORTE_DATA_R = 0x0D;      // Driving PE1 low
+            else                 GPIO_PORTE_DATA_R = 0x0B;      // Driving PE2 low
             num = GPIO_PORTC_DATA_R & 0xF0 ;             // num stores the value of data in PC4 - PC7
-            if( num != 0x0F)          // Some key was pressed
+            if(num != 0xF0)                             // Some key was pressed
             {
-                if( num == 0xE0)      // Key in col 1 was pressed
-                {
-                    col = 1;
-                    return ((row * 4) + col );
-                }
-                else if( num == 0xD0) // Key in col2 was pressed
-                {
-                    col = 2;
-                    return ( (row * 4) + col );
-                }
+                 switch(num)
+                 {
+                   case 0xE0: return (row*4) + 1;  // 1st column from the left
+                   case 0xD0: return (row*4) + 2;  // 2nd column from the left
+                   case 0xB0: return (row*4) + 3;  // 3rd column from the left
+                   case 0x70: return (row*4) + 4;  // 4th column from the left
+                 }
             }
         }
-    return 0;
+
+    return -1; //invalid position
 }
 
 // Function to handle Seven Segment displays
@@ -749,7 +846,7 @@ void processInvalidCommand()
     if(pause_flag == 0 && stop_flag == 0)
     {
         /* Here the if condition makes sure that that the prompt is not displayed when stop state is active */
-        char* s  = "\n\n\rPlease enter any of the following commands:\n\r"
+        char* s  = "\n\n\rPlease enter any one of the following commands:\n\r"
                          "1). Timer Start\n\r"
                          "2). Timer Stop\n\r"
                          "3). Timer Pause\n\r"
@@ -760,6 +857,7 @@ void processInvalidCommand()
              UARTCharPut(UART0_BASE, s[i]);
              i = i+1;
           }
+        print_game_status();
     }
     return;
 }
@@ -931,6 +1029,7 @@ void SysTick_Handler(void)
        {
            time_elapsed = 0;
            seconds += 1;
+           if(seconds == 1000) seconds = 0; // Reset seconds count to 0 to accommodate it in Seven Segment Display
        }
    }
 
@@ -1016,6 +1115,8 @@ int main()
     LCD_init();
     LCD_PutData("Timer Ready",11);
 
+    gameArray_init();  // Initialize the character array that will be used for playing tic tac toe
+
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
@@ -1033,8 +1134,7 @@ int main()
 //            read_sw2();       // Check for sw2 press even when the user has not given any new command
 
             processColors();  // Maintain LED Blink state even when there is no new command
-//            if(processKeyPress() == 1) StartStopCommand_Keypad();      // Handle toggling between start  and stop commands given through keypad
-//            if(processKeyPress() == 2) ResumePauseCommand_Keypad();    // Handle toggling between resume and pause commands given through keypad
+            if(detectKeyPress() == 1) check_game_status();
             SSD_Display_Handler();
           }
 
@@ -1044,10 +1144,11 @@ int main()
         else                              processNormalKey();       // To process Key press that is Neither "Enter" nor "Back Space"
 //        read_sw1();                                                 // Keep checking for sw1 press
 //        read_sw2();                                                 // Keep checking for sw2 press
-        processColors();                                            // Maintain LED blink state even in the middle of a new command
+         processColors();                                            // Maintain LED blink state even in the middle of a new command
 //        if(processKeyPress() == 1) StartStopCommand_Keypad();       // Handle toggling between start  and stop commands given through keypad
 //        if(processKeyPress() == 2) ResumePauseCommand_Keypad();     // Handle toggling between resume and pause commands given through keypad
         SSD_Display_Handler();
+        if(detectKeyPress() == 1) check_game_status();
     }
 
   return 0;
@@ -1078,6 +1179,7 @@ void delayMs(int n)
 //       if(processKeyPress() == 1) StartStopCommand_Keypad();         // Handle toggling between start  and stop commands given through keypad
 //       if(processKeyPress() == 2) ResumePauseCommand_Keypad();       // Handle toggling between resume and pause commands given through keypad
          SSD_Display_Handler();
+         if(detectKeyPress() == 1) check_game_status();
      }
    return;  // sw1 not pressed during the entire duration of the delay
 }
