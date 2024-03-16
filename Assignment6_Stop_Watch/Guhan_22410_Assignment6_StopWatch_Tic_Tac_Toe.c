@@ -50,7 +50,8 @@ void EnableInterrupts(void);         // Function to enable interrupts
 void systick_setup(void);            // Function to initialize the Systick Timer
 void gameArray_init(void);           // Function to initialize the Character array that will be used to play tic tac toe
 void print_game_status(void);        // Function to print the 3x3 matrix of the tic tac toe game
-void check_game_status(void);        // Function to check the status of the tic tac toe game and to give the necessary verdict
+void update_game_status(void);       // Function to update the status of the tic tac toe game with each key press
+void check_game_status(void);        // Function to check the status of the game based on the most recently made move by the players
 
 char console_cmd_buffer[50];       // global character array to store the contents given by the user
 char console_cmd_buffer2[50];      // global character array to store the contents given by the user without the spaces and the tabs
@@ -77,10 +78,11 @@ int time_elapsed = 0;              // Number to be displayed on the SSD (Updated
 int seconds = 0;                   // Time elapsed in seconds (To be displayed on the first 3 SSDs)
 int curr_state = 0;                // 0/1/2 -> Ready / Running / Pause
 int prev_state = 0;                // 0/1/2 -> Ready / Running / Pause
-char game[4][4];                   // Array to hold the contents of the tic tac toe game
+char game[3][3];                   // Array to hold the contents of the tic tac toe game
 int moves = 0;                     // Global variable to keep track of the number of moves played in the tic tac toe game
-int tic_tac_toe_row[] = {3,0,0,0, 3,1,1,1, 3,2,2,2, 3,3,3,3};  // Used for indexing purposes in tic tac toe game
-int tic_tac_toe_col[] = {3,0,1,2, 3,0,1,2, 3,0,1,2, 3,3,3,3};  // Used for indexing purposes in tic tac toe game
+int tic_tac_toe_row[] = {0,0,0,0, 1,1,1,1, 2,2,2,2, 3,3,3,3};  // Used for indexing purposes in tic tac toe game
+int tic_tac_toe_col[] = {0,1,2,3, 0,1,2,3, 0,1,2,3, 0,1,2,3};  // Used for indexing purposes in tic tac toe game
+int game_result = -1;              // -1/0/1/2 => Tic Tac Toe game is not finished /draw / player 1 (X) won / player 2(O) won
 
 
 void GPIO_setup()
@@ -221,15 +223,16 @@ void systick_setup()
 // Function to initialize the character array that will be used for playing tic tac toe
 void gameArray_init()
 {
-   for(int i=0;i<4;i++)
+   for(int i=0;i<3;i++)
    {
-       for(int j=0;j<4;j++)
+       for(int j=0;j<3;j++)
        {
            game[i][j] = '-';
        }
    }
 }
 
+// Function to print the 3x3 tic tac toe game using UART on the console
 void print_game_status()
 {
     UARTCharPut(UART0_BASE,'\n'); // Start from the next line
@@ -247,24 +250,63 @@ void print_game_status()
     return;
 }
 
-void print_invalid_move()
+ /*
+     x = -1 => Invalid Move
+     x =  0 => Game Drawn
+     x =  1 => Player 1 Won
+     x =  2 => Player 2 Won
+ */
+void print_move_status(char* s)
 {
-    char* s  = "\n\nInvalid Move\n\r";
+
     int i = 0; // for indexing purposes
     while(s[i] != '\0')
       {
          UARTCharPut(UART0_BASE, s[i]);
          i = i+1;
       }
+    UARTCharPut(UART0_BASE, '\n');
+    UARTCharPut(UART0_BASE, '\n');
+    UARTCharPut(UART0_BASE, '\r');
     return;
 }
 
+// Function to check the status of the game based on the recently made move by the user
 void check_game_status()
+{
+   // All entries in the first row match
+   if      ( (game[0][0] == game[0][1]) && (game[0][1] == game[0][2]) && (game[0][1] != '-')) game_result = (game[0][0] == 'X') ? 1 : 2;
+
+   // All entries in the second row match
+   else if ( (game[1][0] == game[1][1]) && (game[1][1] == game[1][2]) && (game[1][0] != '-') ) game_result = (game[1][0] == 'X') ? 1 : 2;
+
+   // All entries in the third row match
+   else if ( (game[2][0] == game[2][1]) && (game[2][1] == game[2][2]) && (game[2][0] != '-') ) game_result = (game[2][0] == 'X') ? 1 : 2;
+
+   // All entries in the first column match
+   else if ( (game[0][0] == game[1][0]) && (game[1][0] == game[2][0]) && (game[0][0] != '-') ) game_result = (game[0][0] == 'X') ? 1 : 2;
+
+   // All entries in the second column match
+   else if ( (game[0][1] == game[1][1]) && (game[1][1] == game[2][1]) && (game[0][1] != '-') ) game_result = (game[0][1] == 'X') ? 1 : 2;
+
+   // All entries in the third column match
+   else if ( (game[0][2] == game[1][2]) && (game[1][2] == game[2][2]) && (game[0][2] != '-') ) game_result = (game[0][2] == 'X') ? 1 : 2;
+
+   // All entries in the diagonal from top left to bottom right match
+   else if ( (game[0][0] == game[1][1]) && (game[1][1] == game[2][2]) && (game[0][0] != '-') ) game_result = (game[0][0] == 'X') ? 1 : 2;
+
+   // All entries in the diagonal from top right to bottom left match
+   else if ( (game[0][2] == game[1][1]) && (game[1][1] == game[2][0]) && (game[0][2] != '-') ) game_result = (game[0][2] == 'X') ? 1 : 2;
+}
+// Function to update the status of the game after each move by the user
+void update_game_status()
 {
    int row = 0,col=0;
    num = processKeyPress();            // Identify which key was pressed in the 4x4 keypad
    if(num != -1) row = tic_tac_toe_row[num];     // Get the row    index corresponding to the key press of the 4x4 keypad
    if(num != -1) col = tic_tac_toe_col[num];     // Get the column index corresponding to the key press of the 4x4 keypad
+
+
 
    while(detectKeyPress() != -1)
    {
@@ -273,14 +315,39 @@ void check_game_status()
    // Some delay to overcome debouncing issue
    for(int i=0;i<80;i++) delaySSD();
 
-   if((game[row][col] == 'X') || (game[row][col] == 'O')) print_invalid_move();  // Place already used. Hence it is an invalid move
+   // Handling the case if any switch outside of the first 3x3 switches was pressed
+   if(row == 3 || col == 3 || num == -1)
+   {
+       print_move_status("Invalid Move");
+       return;
+   }
+
+   if((game[row][col] == 'X') || (game[row][col] == 'O'))
+       {
+          print_move_status("Invalid Move");  // Place already used. Hence it is an invalid move
+          print_game_status(); // After every entry , print the status of the game
+       }
    else
     {
        game[row][col] = (moves%2 == 0) ? 'X' : 'O'; // To alternate between X and O
        moves += 1; // Increment the number of moves so that the other guy can enter his/her move the next time
-    }
+       check_game_status();
 
        print_game_status(); // After every entry , print the status of the game
+
+       // Game over. Declare result and start new game
+       if( (moves == 9) || (game_result == 1) || (game_result == 2) )
+       {
+           if( (moves == 9) &&  (game_result == -1) ) print_move_status("Game Drawn");  // Game Drawn
+           else if(game_result == 1)                  print_move_status("Player 1 Won !!");  // Player 1 Won
+           else                                       print_move_status("Player 2 Won !!");  // Player 2 Won
+           game_result = -1;  // Back to square one
+           moves = 0;
+           gameArray_init();   // Initialize the game array again
+       }
+    }
+
+
 
    return;
 }
@@ -473,22 +540,24 @@ int detectKeyPress()
 int processKeyPress()
 {
         int row = 0;
-        for(row = 0; row < 3; row ++)
+        for(row = 0; row < 4; row ++)
         {
             if(row == 0)         GPIO_PORTE_DATA_R = 0x0E;      // Driving PE0 low
             else if(row == 1)    GPIO_PORTE_DATA_R = 0x0D;      // Driving PE1 low
-            else                 GPIO_PORTE_DATA_R = 0x0B;      // Driving PE2 low
+            else if(row == 2)    GPIO_PORTE_DATA_R = 0x0B;      // Driving PE2 low
+            else                 GPIO_PORTE_DATA_R = 0x07;      // Driving PE3 low
             num = GPIO_PORTC_DATA_R & 0xF0 ;             // num stores the value of data in PC4 - PC7
             if(num != 0xF0)                             // Some key was pressed
             {
                  switch(num)
                  {
-                   case 0xE0: return (row*4) + 1;  // 1st column from the left
-                   case 0xD0: return (row*4) + 2;  // 2nd column from the left
-                   case 0xB0: return (row*4) + 3;  // 3rd column from the left
-                   case 0x70: return (row*4) + 4;  // 4th column from the left
+                   case 0xE0: return (row*4) + 0;  // 1st column from the left
+                   case 0xD0: return (row*4) + 1;  // 2nd column from the left
+                   case 0xB0: return (row*4) + 2;  // 3rd column from the left
+                   case 0x70: return (row*4) + 3;  // 4th column from the left
                  }
             }
+            delaySSD();  // Add 1ms delay while moving from one row to another
         }
 
     return -1; //invalid position
@@ -843,8 +912,8 @@ void processNormalKey()
 // Functions to give directions to the user when an Invalid Command has been entered
 void processInvalidCommand()
 {
-    if(pause_flag == 0 && stop_flag == 0)
-    {
+//    if(pause_flag == 0 && stop_flag == 0)
+//    {
         /* Here the if condition makes sure that that the prompt is not displayed when stop state is active */
         char* s  = "\n\n\rPlease enter any one of the following commands:\n\r"
                          "1). Timer Start\n\r"
@@ -857,8 +926,7 @@ void processInvalidCommand()
              UARTCharPut(UART0_BASE, s[i]);
              i = i+1;
           }
-        print_game_status();
-    }
+//    }
     return;
 }
 
@@ -1134,7 +1202,7 @@ int main()
 //            read_sw2();       // Check for sw2 press even when the user has not given any new command
 
             processColors();  // Maintain LED Blink state even when there is no new command
-            if(detectKeyPress() == 1) check_game_status();
+            if(detectKeyPress() == 1) update_game_status();
             SSD_Display_Handler();
           }
 
@@ -1148,7 +1216,7 @@ int main()
 //        if(processKeyPress() == 1) StartStopCommand_Keypad();       // Handle toggling between start  and stop commands given through keypad
 //        if(processKeyPress() == 2) ResumePauseCommand_Keypad();     // Handle toggling between resume and pause commands given through keypad
         SSD_Display_Handler();
-        if(detectKeyPress() == 1) check_game_status();
+        if(detectKeyPress() == 1) update_game_status();
     }
 
   return 0;
@@ -1179,7 +1247,7 @@ void delayMs(int n)
 //       if(processKeyPress() == 1) StartStopCommand_Keypad();         // Handle toggling between start  and stop commands given through keypad
 //       if(processKeyPress() == 2) ResumePauseCommand_Keypad();       // Handle toggling between resume and pause commands given through keypad
          SSD_Display_Handler();
-         if(detectKeyPress() == 1) check_game_status();
+         if(detectKeyPress() == 1) update_game_status();
      }
    return;  // sw1 not pressed during the entire duration of the delay
 }
