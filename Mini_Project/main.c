@@ -12,122 +12,89 @@
 #include <ctype.h>
 #include <main.h>
 
-//// Macros for the various colors
-//#define COLOR_GREEN_ON     0x08
-//#define COLOR_BLUE_ON      0x04
-//#define COLOR_RED_ON       0x02
-//#define COLOR_CYAN_ON      0x0C  // B + G
-//#define COLOR_YELLOW_ON    0x0A  // R + G
-//#define COLOR_MAGENTA_ON   0x06  // B + R
-//#define COLOR_WHITE_ON     0x0E  // B + R + G
-//#define NO_COLOR           0x00  // No color
-//
-//#define STACK_SIZE 100 // size of the dummy array that will be used to save the context of a particular task before task switching
-//#define THREAD_NUM 4   // defining the max  number of tasks
-//struct tcb
-//{
-//    long* sp;           // pointer that will point to the Stack of that particular task
-//    struct tcb* next;   // pointer pointing to the TCB of the next task
-//    int priority;       // lower the number, higher is the priority of that task (useful only for event threads)
-//};
-//
-//typedef struct tcb tcbtype;
-//
-//tcbtype tcbs[THREAD_NUM];  // Array of tcbs. Each task will have its own tcb
-//long stacks[THREAD_NUM][STACK_SIZE]; // Dummy array that helps us save the context of a particular task before switching on to the next task
-//
-//char NUMto7SEG[10] = {    0x3f,  // 0
-//                          0x06,  // 1
-//                          0x5B,  // 2
-//                          0x4F,  // 3
-//                          0x66,  // 4
-//                          0x6D,  // 5
-//                          0x7D,  // 6
-//                          0x07,  // 7
-//                          0x7F,  // 8
-//                          0x6F   // 9
-//                      };
-
-
 int main()
 {
     DisableInterrupts();
     Init_PortF();
     Init_Systick();
     init_portab();
-    OS_AddThreads(&task1, &task2, &task3, &task4);
+    OS_AddThreads(&task0, &task1, &task2, &task3);
     start_os();
 }
 
-void task1(void)
+/* task 0 makes the RED LED ON continuously and also displays the count on the right most SSD*/
+void task0(void)
 {
     int i = 0;
     while(1)
     {
-        GPIO_PORTF_DATA_R = 0x02;
+        GPIO_PORTF_DATA_R = 0x02;  // red color LED
         if(i > 9)
             i = 0;
         else i++;
 
-        for(int j1 = 0; j1<1200000; j1++) // slower task
+        for(int j1 = 0; j1<1000000; j1++) // slower task (1200000)
             asm("NOP");
-        (GPIO_PORTA_DATA_R = 0x10);
+        (GPIO_PORTA_DATA_R = 0x10); //PA4 is made high => Right most SSD is chosen
         GPIO_PORTB_DATA_R = NUMto7SEG[i];
     }
 }
 
-void task2(void)
+/* task 1 makes the BLUE LED ON continuously and displays its count on the second SSD from the right*/
+void task1(void)
 {
     int j = 0;
     while(1)
     {
-        GPIO_PORTF_DATA_R = 0x04;
+        GPIO_PORTF_DATA_R = 0x04;  // Blue LED
 
              if(j>9)
                 j=0;
 
              else j++;
 
-             for(int j1 = 0; j1<1000000; j1++)
+             for(int j1 = 0; j1<1000000; j1++) //(1000000)
                      asm("NOP");
 
-             (GPIO_PORTA_DATA_R = 0x20);
-             GPIO_PORTB_DATA_R = NUMto7SEG[j];
+             (GPIO_PORTA_DATA_R = 0x20); // PA5 = 1 => Second LED from the right is chosen
+             GPIO_PORTB_DATA_R = NUMto7SEG[j]; // Display the count value indicated by j
     }
 }
 
-void task3(void)
+/* task 2 makes the GREEN LED ON continuously and displays its count on the third SSD from the right*/
+void task2(void)
 {
     int k = 0;
     while(1)
     {
-        GPIO_PORTF_DATA_R = 0x08;
+        GPIO_PORTF_DATA_R = 0x08;  // Green color LED
               if(k>9)
                   k = 0;
               else k++;
 
-              for(int j1=0;j1<1000000;j1++)
+              for(int j1=0;j1<1000000;j1++) // 1000000
                    asm("NOP");
-              (GPIO_PORTA_DATA_R = 0x40);
-              GPIO_PORTB_DATA_R = NUMto7SEG[k];
+              (GPIO_PORTA_DATA_R = 0x40);  // Third SSD from the right is chosen
+              GPIO_PORTB_DATA_R = NUMto7SEG[k]; // Display the value indicated by k on the SSD
     }
 }
 
-void task4(void)
+/* task 3 makes the WHITE LED ON continuously and displays its count on the second SSD from the right*/
+void task3(void)
 {
     int l = 0;
     while(1)
     {
-        GPIO_PORTF_DATA_R = 0x0e;
+        GPIO_PORTF_DATA_R = 0x0e;  // white LED
               if(l>9)
                   l = 0;
 
               else l++;
 
-              for(int j1=0;j1<800000; j1++)
+              for(int j1=0;j1<1000000; j1++) //400000
                   asm("NOP");
-              (GPIO_PORTA_DATA_R = 0x80);
-              GPIO_PORTB_DATA_R = NUMto7SEG[l];
+              (GPIO_PORTA_DATA_R = 0x80);  // PA7 = 1 => Left most SSD is chosen
+              GPIO_PORTB_DATA_R = NUMto7SEG[l]; // Count value indicated by l is displayed on the left most SSD
     }
 }
 
@@ -169,74 +136,110 @@ void Set_initial_stack(int i)
 {
     tcbs[i].sp = &stacks[i][STACK_SIZE-16]; // Initializing Stack Pointer
     stacks[i][STACK_SIZE - 1] = 0x01000000; // Thumb mode
-    stacks[i][STACK_SIZE-3] = 1;
-    stacks[i][STACK_SIZE-4] = 2;
-    stacks[i][STACK_SIZE-5] = 3;
-    stacks[i][STACK_SIZE-6] = 4;
-    stacks[i][STACK_SIZE-7] = 5;
-    stacks[i][STACK_SIZE-8] = 6;
-    stacks[i][STACK_SIZE-9] = 7;
-    stacks[i][STACK_SIZE-10] = 8;
-    stacks[i][STACK_SIZE-11] = 9;
-    stacks[i][STACK_SIZE-12] = 10;
-    stacks[i][STACK_SIZE-13] = 11;
-    stacks[i][STACK_SIZE-14] = 12;
-    stacks[i][STACK_SIZE-15] = 13;
-    stacks[i][STACK_SIZE-16] = 14;
+    stacks[i][STACK_SIZE-3] = 1;   // R14
+    stacks[i][STACK_SIZE-4] = 2;   // R12
+    stacks[i][STACK_SIZE-5] = 3;   // R3
+    stacks[i][STACK_SIZE-6] = 4;   // R2
+    stacks[i][STACK_SIZE-7] = 5;   // R1
+    stacks[i][STACK_SIZE-8] = 6;   // R0
+    stacks[i][STACK_SIZE-9] = 7;   // R11
+    stacks[i][STACK_SIZE-10] = 8;  // R10
+    stacks[i][STACK_SIZE-11] = 9;  // R9
+    stacks[i][STACK_SIZE-12] = 10; // R8
+    stacks[i][STACK_SIZE-13] = 11; // R7
+    stacks[i][STACK_SIZE-14] = 12; // R6
+    stacks[i][STACK_SIZE-15] = 13; // R5
+    stacks[i][STACK_SIZE-16] = 14; // R4.  Stack Pointer will be pointing to this location.
 
 }
 
 void OS_AddThreads(void (*task0)(void), void(*task1)(void), void(*task2)(void) , void(*task3)(void) )
 {
+    // Here we form a linked list structure chaining all the main threads
     tcbs[0].next = &tcbs[1];
     tcbs[1].next = &tcbs[2];
     tcbs[2].next = &tcbs[3];
     tcbs[3].next = &tcbs[0];
 
-    Set_initial_stack(0);
-    stacks[0][STACK_SIZE-2] = (long)(task0);
+    // Assigning priorities to each task (lower the number, higher the priority)
+    for(int pri = 0; pri < THREAD_NUM ; pri++)
+    {
+        tcbs[pri].priority = pri;
+    }
 
-    Set_initial_stack(1);
-    stacks[1][STACK_SIZE-2] = (long)(task1);
 
-    Set_initial_stack(2);
-    stacks[2][STACK_SIZE-2] = (long)(task2);
+    Set_initial_stack(0);  // Set up dummy stack for task0 that will be used to save the context for task 0
+    stacks[0][STACK_SIZE-2] = (long)(task0); // store the function pointer of task0 in the last but first location of the dummy array of task0
 
-    Set_initial_stack(3);
-    stacks[3][STACK_SIZE-2] = (long)(task3);
+    Set_initial_stack(1); // Set up dummy stack for task1 that will be used to save the context for task 1
+    stacks[1][STACK_SIZE-2] = (long)(task1);  // store the function pointer of task1 in the last but first location of the dummy array of task1
 
-    runpt = &tcbs[0];
+    Set_initial_stack(2); // Set up dummy stack for task2 that will be used to save the context for task 2
+    stacks[2][STACK_SIZE-2] = (long)(task2);  // store the function pointer of task2 in the last but first location of the dummy array of task2
+
+    Set_initial_stack(3); // Set up dummy stack for task3 that will be used to save the context for task 3
+    stacks[3][STACK_SIZE-2] = (long)(task3);  // store the function pointer of task3 in the last but first location of the dummy array of task3
+
+    runpt = &tcbs[0]; // Make runpt point to tcb of the first task
 }
 
 void start_os(void)
 {
-    asm("LDR R0, =runpt");
-    asm("LDR R2,[R0]");
-    asm("LDR SP,[R2]");
-    asm("POP {R4-R11}");
-    asm("POP {R0 - R3}");
-    asm("POP {R12}");
+    asm("LDR R0, =runpt");  // Store the address of "runpt" in register R0
+    asm("LDR R2,[R0]");     // Dereference R0 to get the "runpt" value. Store runpt in register R2
+    asm("LDR SP,[R2]");     // Dereference R2 => Dereference runpt => This gives sp value. Store sp of that particular task in the actual SP register.
+    asm("POP {R4-R11}");    // Get the contents in the next 8 locations of the stack memory and store it in registers R4 to R11 => Saving the context
+    asm("POP {R0 - R3}");   // Get the contents in the next 4 locations of the stack memory and store it in registers R0 to R3  => Saving the context
+    asm("POP {R12}");       // Get the content pointed to by the stack pointer and store it in register R12 => Saving the context
     asm("POP {LR}");
     asm("POP {LR}");  // to get to the position where function pointer of that particular task is stored
     asm("POP {R1}");
-    asm("CPSIE I");
+    asm("CPSIE I");   // Enable the interrupts
     asm("BX LR");  // BX is branch instruction
 }
 
-__attribute__((naked))
+__attribute__((naked))        // DOUBT : What does naked do ???
 void SysTick_Handler(void)
 {
-    asm("CPSID I");
-    asm("PUSH {R4-R11}");
+
+//    asm("LDR R2, =offset");
+
+
+    asm("CPSID I");           // Disable the interrupts. This is done to prevent interrupts when we switch from one task to another
+    asm("PUSH {R4-R11}");     // Pushing the contents of R4-R11 on to the dummy array that acts as stack for each task
+    asm("LDR R0, =runpt");    // Store the address of runpt in R0
+    asm("LDR R1, [R0]");      // Dereference R0 to get "runpt". Store "runpt" in R1 register
+    asm("STR SP,[R1]");       // Store the value of actual SP in the "sp" pointer of the tcb structure of that particular task
+
+
+    // If count value is greater than 0 perform the same task again
+    if(count > 0) count -= 1;
+
+    // If the count for the current task has been exhausted, then move on to the next task (Compute the count value for the new task to be executed)
+    else
+    {
+        idx = (idx + 1) % (THREAD_NUM);  // compute the index of the next task to be performed
+        runpt = runpt->next;             //make runpt point to the tcb of the next task to be performed
+        switch(idx)
+        {
+           case 0:  count = 10; break;
+           case 1:  count =  5; break;
+           case 2:  count =  2; break;
+           default: count =  1; break;
+        }
+    }
+
+    // The next 5 steps will help us switch from one task to another
     asm("LDR R0, =runpt");
     asm("LDR R1, [R0]");
-    asm("STR SP,[R1]");
-    asm("LDR R1, [R1,#4]"); // getting next thread  tcb
-    asm("STR R1,[R0]");
-    asm("LDR SP,[R1]");
-    asm("POP {R4-R11}");
-    asm("CPSIE I");
-    asm("BX LR");
+
+//    asm("LDR R1,[R1,#4]");    // runpt = runpt->next => Make runpt point to the tcb of the next task. R1 points to the tcb of the next task.
+//    asm("STR R1,[R0]");       // Store the value of R1 in location pointed to by R0. R0 acts as pointer to the shifted runpt
+    asm("LDR SP,[R1]");       // Dereferencing R1 gives "sp" of the new task. This value is loaded to SP so that SP now points to the dummy array of the task that needs to be executed
+    asm("POP {R4-R11}");      // Transfer the contents of the new task on to the registers R4 - R11 and start executing the new task
+    asm("CPSIE I");           // Enable interrupts
+    asm("BX LR");             // What does this do ?
+
 }
 
 void init_portab(void)
