@@ -33,8 +33,8 @@ void getTimerValue();          // Function to get the timer count value given by
 void SSD_Display_Handler();    // Function to display the values in the seven segment display
 void processSSD(int);          // Function to handle display of numbers in SSD (Seven Segment Display)
 void delaySSD(void);           // Function to insert some delay between the glowing of various LEDs
-void GPIO_PORT_AB_Init(void);    // Function to initialize PORTA and PORTB to get the display the count value in SSD
-void delay_adc_conv(int n);    // Function to give delay in adc conversion
+void GPIO_PORT_AB_Init(void);  // Function to initialize PORTA and PORTB to get the display the count value in SSD
+void delay_n_ms(int n);        // Function to give delay of "n" ms
 void EnableInterrupts(void);   // Function to enable interrupts
 void DisableInterrupts(void);  // Function to disable interrupts
 void systick_setup();          // Function to setup the systick timer with the necessary conditions
@@ -45,8 +45,6 @@ char val;                      // global character variable that is used across 
 int id = 0;                    // global variable to take care of indexing of the character buffer array
 int Color = 0;                 // global variable to denote which color is currently active ( 0 indicates no color )
 int Blink_Delay = 1000;        // global integer to store the blink rate
-int sw1_pressed = 0;           // flag to indicate if sw1 has been pressed
-int sw2_pressed = 0;           // flag to indicate if sw2 has been pressed
 int count_sw2 = 0;             // to keep track of the number of times SW2 was pressed
 int seconds = 0;               // Timer value that will be displayed in the Seven Segment Displays
 int timer_start_value = 0 ;    // Temporary variable that holds the count value given by the user
@@ -90,47 +88,6 @@ void systick_setup()
 
 void SysTick_Handler(void)
 {
-//   // Handle Start and Stop States
-//   if(sw1_pressed == 1)
-//   {
-//       // STOP state is active
-//       if(stop_flag == 1)
-//       {
-//           Color = 1;
-//           Blink_Delay = 1;  // Good enough to keep the LED continuosly ON
-//           time_elapsed = 0; // Reset the count value
-//           seconds      = 0; // Reset the count value
-//       }
-//
-//       // START state is active
-//       else
-//       {
-//           Color = 1;
-//           Blink_Delay = 50;  // No reason behind 50. Just a number I have chosen for the Systick Assignment
-//       }
-//
-//       // SysTick_Handler() is called for every 100ms.
-//       // So when we set sw1_delay to 5 => We are allowing a time of 500ms between accepting sw1 presses
-//       sw1_delay += 1;
-//       if(sw1_delay == 5) sw1_pressed = 0; // Start accepting further interrupts
-//
-//   }
-//
-//   // Handle Pause and Resume states
-//   if((sw2_pressed == 1) && (stop_flag == 0))
-//   {
-//       // PAUSE state is active
-//       if(pause_flag == 1) Color = 2;  // Blink Blue in PAUSE state
-//       // RESUME state is active
-//       else Color = 1;                 // Blink Green in RESUME state
-//       Blink_Delay = 50;               // No reason behind 50. Just a number I have chosen for the Systick Assignment
-//       sw2_delay += 1;
-//
-//       // SysTick_Handler() is called for every 100ms.
-//       // So when we set sw2_delay to 5 => We are allowing a time of 500ms between accepting sw2 presses
-//       if(sw2_delay == 5) sw2_pressed = 0; // Start accepting further interrupts
-//   }
-
   if(stop_flag == 1)               // stop state
   {
      if(set_flag == 0)              // Reset the counter when a new value has not been given by the user
@@ -216,62 +173,54 @@ int findBlinkRate()
 // Function to take care of sw1 press
 void read_sw1()
 {
-    sw1_pressed = 0;
+    DisableInterrupts();
     int current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;      // read the status of sw1
     if((current_state_sw1) == 0x00)
     {
         while(current_state_sw1 == 0x00)
         {
             current_state_sw1 = GPIO_PORTF_DATA_R & 0x10;  // read the data from sw1 again
-            if(current_state_sw1 == 0x10)
+            if(current_state_sw1 == 0x10)                  // switch 1 released
             {
-                sw1_pressed = 1;                           // consider sw1 to be pressed
-                Color = Color + 1;
-                if(Color == 8) Color = 1;
-                break;
+                delay_n_ms(25);                            // Wait for 20ms before taking action
+                set_flag   = 0;                            // Reset set flag while taking start and stop action
+                if(stop_flag == 1)
+                {
+
+                    stop_flag  = 0; // go to start state
+                    pause_flag = 0; // In start state, override pause state as the start state has higher precedence
+                }
+                else stop_flag = 1; // go to stop state
             }
         }
     }
+    EnableInterrupts();
     return;
 }
 
 void read_sw2()
 {
+    DisableInterrupts();
     int current_state_sw2 = GPIO_PORTF_DATA_R & 0x01;   // read the status of sw2
-    sw2_pressed = 0;
     if(current_state_sw2 == 0x00)
     {
         while(current_state_sw2 == 0x00)
         {
             current_state_sw2 = GPIO_PORTF_DATA_R & 0x01;  // read the data from sw2 again
-            if(current_state_sw2 == 0x01)                     // If value is still 0, consider sw2 to be pressed.
+            if(current_state_sw2 == 0x01)                  // switch 2 released
             {
-                sw2_pressed = 1;                           // consider sw2 to be pressed
-                count_sw2 = count_sw2 + 1;                 // increment the count value of sw2 press to increase the blink speed of the LED
-                if(count_sw2 == 7) count_sw2 = 1;
-                switch(count_sw2)
+                delay_n_ms(25);                            // Wait for 20ms before taking action (to overcome de-bouncing)
+
+                // Toggle between pause and resume only when stop flag is not active
+                if(stop_flag == 0)
                 {
-                   case 1: Blink_Delay = 250;    // blink 2 times in two seconds  => blink once in 1 second
-                           break;
-
-                   case 2: Blink_Delay = 125;    // blink 4 times in two seconds  => blink 2 times in 1 second
-                           break;
-
-                   case 3: Blink_Delay = 62.5;   // blink 8 times in two seconds  => blink 4 times in 1 second
-                           break;
-
-                   case 4: Blink_Delay = 31.25;  // blink 16 times in two seconds => blink 8 times in 1 second
-                           break;
-
-                   case 5: Blink_Delay = 15.625;  // blink 32 times in two seconds => blink 16 times in one second => MAX SPEED (LED Constantly On)
-                           break;
-
-                   case 6: Blink_Delay = 1000;   // After max speed switch back to blinking once in 2 seconds  (This is the lowest speed)
-                           break;
+                    if(pause_flag == 0) pause_flag = 1;   // Pause the timer
+                    else                pause_flag = 0;   // Resume the timer
                 }
             }
         }
     }
+    EnableInterrupts();
     return;
 }
 
@@ -571,7 +520,7 @@ void adc_conv()
     temp2=(int)temp;
     x=4999-temp2;
     PWM1_3_CMPA_R=x;
-//    delay_adc_conv(1000);
+//    delay_n_ms(1000);
 }
 
 
@@ -603,8 +552,8 @@ int main()
     {
         while(!(UARTCharsAvail(UART0_BASE)))
           {
-//            read_sw1();       // Check for sw1 press even when the user has not given any new command
-//            read_sw2();       // Check for sw2 press even when the user has not given any new command
+            read_sw1();       // Check for sw1 press even when the user has not given any new command
+            read_sw2();       // Check for sw2 press even when the user has not given any new command
 //            processColors();  // Maintain LED Blink state even when there is no new command
             adc_conv();
             SSD_Display_Handler();
@@ -660,7 +609,7 @@ void delaySSD()
 }
 
 
-void delay_adc_conv(int n)
+void delay_n_ms(int n)
 {
      int i, j;
     for(i = 0 ; i < n; i++)
