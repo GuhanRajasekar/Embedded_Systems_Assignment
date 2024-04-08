@@ -1,3 +1,4 @@
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -38,19 +39,25 @@ void delay_n_ms(int n);        // Function to give delay of "n" ms
 void EnableInterrupts(void);   // Function to enable interrupts
 void DisableInterrupts(void);  // Function to disable interrupts
 void systick_setup();          // Function to setup the systick timer with the necessary conditions
+void processColors();          // Function to take care of blinking of LED
 
 char console_cmd_buffer[30];   // global character array to store the contents given by the user
 char console_cmd_buffer2[30];  // global character array to store the contents given by the user without the spaces and the tabs
 char val;                      // global character variable that is used across functions to read data from the console
 int id = 0;                    // global variable to take care of indexing of the character buffer array
 int Color = 0;                 // global variable to denote which color is currently active ( 0 indicates no color )
-int Blink_Delay = 1000;        // global integer to store the blink rate
 int count_sw2 = 0;             // to keep track of the number of times SW2 was pressed
 int seconds = 0;               // Timer value that will be displayed in the Seven Segment Displays
 int timer_start_value = 0 ;    // Temporary variable that holds the count value given by the user
 int stop_flag =  1;            // 0/1 => Stop Command is  inactive / active
 int pause_flag = 0;            // 0/1 => Pause Command is inactive / active (Upon resetm we assume the timer is paused)
 int set_flag   = 0;            // 1 => New value has been given by the user
+int Blink_Delay = 500;        // Blink Delay for the LED
+//int x_curr   = 0;
+int temp2_prev   = 0;
+int temp2_global;
+//int show_adc_flag  = 0;        // 0/1 => Display / Don't Display ADC count value
+int show_adc_count = 0;
 
 void inline EnableInterrupts(void)
 {
@@ -86,8 +93,31 @@ void systick_setup()
     NVIC_ST_CTRL_R = 7;
 }
 
+void processColors()
+{
+    if(Blink_Delay == 500)
+        {
+           GPIO_PORTF_DATA_R = NO_COLOR ; // Stop Blinking for the lowest speed
+        }
+    else
+    {
+        GPIO_PORTF_DATA_R = COLOR_BLUE_ON;
+        delayMs(Blink_Delay);
+
+        // This condition makes sure that when Blink_Delay = 0, Blue LED is ON constantly
+        if(Blink_Delay != 0) GPIO_PORTF_DATA_R = NO_COLOR; // Blink Delay only when max value of potentiometer has not been reached
+        delayMs(Blink_Delay);
+    }
+
+    return;
+}
 void SysTick_Handler(void)
 {
+  if(show_adc_count > 0)
+  {
+      show_adc_count = show_adc_count - 1;
+      if(show_adc_count < 0) show_adc_count = 0;
+  }
   if(stop_flag == 1)               // stop state
   {
      if(set_flag == 0)              // Reset the counter when a new value has not been given by the user
@@ -259,59 +289,6 @@ void processInvalidCommand()
     return;
 }
 
-// Function to handle which Color must be blinking and at what rate the blink must be happening
-void processColors()
-{
-    switch(Color)
-       {
-          case 1: GPIO_PORTF_DATA_R = COLOR_GREEN_ON;
-                  delayMs(Blink_Delay);
-                  GPIO_PORTF_DATA_R = NO_COLOR;
-                  delayMs(Blink_Delay);
-                  break;
-
-          case 2: GPIO_PORTF_DATA_R = COLOR_BLUE_ON;
-                  delayMs(Blink_Delay);
-                  GPIO_PORTF_DATA_R = NO_COLOR;
-                  delayMs(Blink_Delay);
-                  break;
-
-          case 3: GPIO_PORTF_DATA_R = COLOR_CYAN_ON;
-                  delayMs(Blink_Delay);
-                  GPIO_PORTF_DATA_R = NO_COLOR;
-                  delayMs(Blink_Delay);
-                  break;
-
-          case 4: GPIO_PORTF_DATA_R = COLOR_RED_ON;
-                  delayMs(Blink_Delay);
-                  GPIO_PORTF_DATA_R = NO_COLOR;
-                  delayMs(Blink_Delay);
-                  break;
-
-          case 5: GPIO_PORTF_DATA_R = COLOR_YELLOW_ON;
-                  delayMs(Blink_Delay);
-                  GPIO_PORTF_DATA_R = NO_COLOR;
-                  delayMs(Blink_Delay);
-                  break;
-
-          case 6: GPIO_PORTF_DATA_R = COLOR_MAGENTA_ON;
-                  delayMs(Blink_Delay);
-                  GPIO_PORTF_DATA_R = NO_COLOR;
-                  delayMs(Blink_Delay);
-                  break;
-
-          case 7: GPIO_PORTF_DATA_R = COLOR_WHITE_ON;
-                  delayMs(Blink_Delay);
-                  GPIO_PORTF_DATA_R = NO_COLOR;
-                  delayMs(Blink_Delay);
-                  break;
-
-         default: GPIO_PORTF_DATA_R = NO_COLOR;   // for debugging purposes
-                  break;
-
-     }
-    return;
-}
 
 // Function to empty the Character Buffer Array
 void emptyBuffer()
@@ -359,6 +336,7 @@ void processEnterKey()
     emptyBuffer();
     UARTCharPut(UART0_BASE, '\n'); // Once Enter key is pressed and the character buffer has been emptied, move on to the next line
     UARTCharPut(UART0_BASE, '\r'); // After moving to the new line, also move to the extreme left end
+
     EnableInterrupts();
 }
 
@@ -395,11 +373,19 @@ void processSSD(int ssd)
 
    int disp_num;  // Number to be displayed on the SSD
    // Extracting digits
-   int units = seconds % 10;         // digit in units place of time elapsed
-   int tens = (seconds / 10) % 10;   // digit in tens place of the time elapsed
-   int hundreds = seconds / 100;     // digit in hundredth place of the time elapsed
+   int units =     (show_adc_count > 0) ? temp2_prev%10 : seconds % 10;         // digit in units place of time elapsed
+   int tens =      (show_adc_count > 0) ? ((temp2_prev / 10) % 10) :((seconds / 10)  % 10);   // digit in tens place of the time elapsed
+   int hundreds =  (show_adc_count > 0) ? ((temp2_prev / 100)% 10) :((seconds / 100) % 10); // digit in hundredth place of the time elapsed
+   int thousands = (show_adc_count > 0) ? (temp2_prev / 1000): (seconds / 1000);
 
-   if(ssd == 2)
+
+   // PA7 = 1 => First SSD from the left is chosen to display the thousands digit of the count value
+   if(ssd == 1)
+   {
+       GPIO_PORTA_DATA_R =    (0x80) | (GPIO_PORTA_DATA_R & 0x0F);
+       disp_num = thousands;
+   }
+   else if(ssd == 2)
    {
        // PA6 = 1 => Second SSD from the left is chosen to display the hundreds digit of the count value
 //       GPIO_PORTA_DATA_R     = (0x40);
@@ -444,6 +430,9 @@ void processSSD(int ssd)
 
 void SSD_Display_Handler()
 {
+    processSSD(1);   // First SSD from the left
+    delaySSD();
+
     processSSD(2);   // Second SSD from the left
     delaySSD();
 
@@ -461,21 +450,40 @@ void pwm_setup()
     SYSCTL_RCGCGPIO_R |= 0x20; /* enable clock to PORTF */
     SYSCTL_RCC_R &= ~0x00100000; /* no pre-divide for PWM clock */
     SYSCTL_RCC_R |= 0x000E0000;
-    /* Enable port PF2 for PWM1 M1PWM7 */
-    GPIO_PORTF_AFSEL_R = 6; /* PF2 uses alternate function */
-    GPIO_PORTF_PCTL_R &= ~0x00000F00; /* make PF2 PWM output pin */
-    GPIO_PORTF_PCTL_R |= 0x00000500;
-    GPIO_PORTF_DEN_R |= 6; /* pin digital */
 
+//    /* Enable port PF2 for PWM1 M1PWM7 */
+//    GPIO_PORTF_AFSEL_R = 6; /* PF2 uses alternate function */
+//    GPIO_PORTF_PCTL_R &= ~0x00000F00; /* make PF2 PWM output pin */
+//    GPIO_PORTF_PCTL_R |= 0x00000500;
+//    GPIO_PORTF_DEN_R |= 6; /* pin digital */
+//
+//
+//    PWM1_3_CTL_R &= ~(1<<0); /* stop counter */
+//    PWM1_3_CTL_R &= ~(1<<1);
+//    PWM1_3_GENA_R = 0x0000008C; /* M1PWM7 output set when reload, */
+//    /* clear when match PWMCMPA */
+//    PWM1_3_LOAD_R = 5000; /* set load value for 1kHz (16MHz/16000) */
+//    PWM1_3_CMPA_R = 4999; /* set duty cycle to min */
+//    PWM1_3_CTL_R = 1; /* start timer */
+//    PWM1_ENABLE_R = 0x40; /* start PWM1 ch7 */
 
-    PWM1_3_CTL_R &= ~(1<<0); /* stop counter */
-    PWM1_3_CTL_R &= ~(1<<1);
-    PWM1_3_GENA_R = 0x0000008C; /* M1PWM7 output set when reload, */
+    SYSCTL_RCGCGPIO_R |= 0x10;   // Enable clock to Port E
+
+    /* Enable port PE4 for PWM1 M1PWM2 */
+    GPIO_PORTE_AFSEL_R = 0x10; /* PE4 uses alternate function */
+    GPIO_PORTE_PCTL_R &= ~0x000F0000; /* make PF2 PWM output pin */
+    GPIO_PORTE_PCTL_R |= 0x00050000;
+    GPIO_PORTE_DEN_R |= 0x10; /* pin digital */
+
+    //PWM Module 1 Generator 1
+    PWM1_1_CTL_R &= ~(1<<0); /* stop counter */
+    PWM1_1_CTL_R &= ~(1<<1);
+    PWM1_1_GENA_R = 0x0000008C; /* M1PWM2 output set when reload, */
     /* clear when match PWMCMPA */
-    PWM1_3_LOAD_R = 5000; /* set load value for 1kHz (16MHz/16000) */
-    PWM1_3_CMPA_R = 4999; /* set duty cycle to min */
-    PWM1_3_CTL_R = 1; /* start timer */
-    PWM1_ENABLE_R = 0x40; /* start PWM1 ch7 */
+    PWM1_1_LOAD_R = 5000; /* set load value for 1kHz (16MHz/16000) */
+    PWM1_1_CMPA_R = 4999; /* set duty cycle to min */
+    PWM1_1_CTL_R = 1; /* start timer */
+    PWM1_ENABLE_R = 0x04; /* start PWM1 ch2 */
 
 
 
@@ -518,9 +526,25 @@ void adc_conv()
     ADC0_ISC_R = 8; /* clear completion flag */
     temp=(((result)/4095.0)*4999.0);
     temp2=(int)temp;
+    temp2_global = temp2;
     x=4999-temp2;
-    PWM1_3_CMPA_R=x;
-//    delay_n_ms(1000);
+
+    if((temp2_prev - temp2>=20) || (temp2 - temp2_prev >= 20))
+    {
+        show_adc_count = 5;
+        temp2_prev = temp2;
+    }
+//    PWM1_3_CMPA_R=x;
+    PWM1_1_CMPA_R=x;
+
+    if     ((x>=0)      && (x<500) ) Blink_Delay = 0;
+    else if((x >= 500)  && (x<1000)) Blink_Delay = 30;
+    else if((x >= 1000) && (x<2000)) Blink_Delay = 60;
+    else if((x >= 2000) && (x<3000)) Blink_Delay = 120;
+    else if((x >= 3000) && (x<4000)) Blink_Delay = 200;
+    else                             Blink_Delay = 500;
+
+    processColors();
 }
 
 
@@ -564,7 +588,7 @@ int main()
         else                              processNormalKey();        // To process Key press that is Neither "Enter" nor "Back Space"
         read_sw1();                                                  // Keep checking for sw1 press
         read_sw2();                                                  // Keep checking for sw2 press
-        processColors();                                             // Maintain LED blink state even in the middle of a new command
+//        processColors();                                             // Maintain LED blink state even in the middle of a new command
         adc_conv();
         SSD_Display_Handler();
     }
