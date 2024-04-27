@@ -11,6 +11,8 @@
 #include <driverlib/uart.h>
 #include <ctype.h>
 #include <main.h>
+#include "sine_table.h"
+#include "periph_ctl.h"
 
 int main()
 {
@@ -18,8 +20,10 @@ int main()
     Init_PortF();
     Init_Systick();
     init_portab();
+    configure_spi();
     OS_AddThreads(&task0, &task1, &task2, &task3);
     start_os();
+    return 0; // Program Control never reaches this point
 }
 
 /* task 0 makes the RED LED ON continuously and also displays the count on the right most SSD*/
@@ -82,20 +86,58 @@ void task2(void)
 /* task 3 makes the WHITE LED ON continuously and displays its count on the second SSD from the right*/
 void task3(void)
 {
-    int l = 0;
-    while(1)
-    {
-        GPIO_PORTF_DATA_R = 0x0e;  // white LED
-              if(l>9)
-                  l = 0;
+        int l = 0;
+        while(1)
+        {
+            GPIO_PORTF_DATA_R = 0x0e;  // white LED
+                  if(l>9)
+                      l = 0;
 
-              else l++;
+                  else l++;
 
-              for(int j1=0;j1<1000000; j1++) //400000
-                  asm("NOP");
-              (GPIO_PORTA_DATA_R = 0x80);  // PA7 = 1 => Left most SSD is chosen
-              GPIO_PORTB_DATA_R = NUMto7SEG[l]; // Count value indicated by l is displayed on the left most SSD
-    }
+                  for(int j1=0;j1<1000000; j1++) //400000
+                      asm("NOP");
+                  (GPIO_PORTA_DATA_R = 0x80);  // PA7 = 1 => Left most SSD is chosen
+                  GPIO_PORTB_DATA_R = NUMto7SEG[l]; // Count value indicated by l is displayed on the left most SSD
+        }
+}
+
+/*task 4 sends value to LTC1661 DAC to generate sinusoidal waveform and view it on the oscilloscope*/
+void task4(void)
+{
+//    int l = 0;
+//    while(1)
+//    {
+//        GPIO_PORTF_DATA_R = 0x0e;  // white LED
+//              if(l>9)
+//                  l = 0;
+//
+//              else l++;
+//
+//              for(int j1=0;j1<1000000; j1++) //400000
+//                  asm("NOP");
+//              (GPIO_PORTA_DATA_R = 0x80);  // PA7 = 1 => Left most SSD is chosen
+//              GPIO_PORTB_DATA_R = NUMto7SEG[l]; // Count value indicated by l is displayed on the left most SSD
+//    }
+
+  while(1)
+  {
+       sin_index = (sin_index+1)%127;        // Increment the index to send the next value
+       data      =  sine[sin_index];         // Pick a value to be sent from the look up table
+       unsigned int command   =  0x9000;     // To send value on Channel A
+
+       int temp =  GPIO_PORTF_DATA_R ;
+       unsigned temp_data = ((data<<2)|(command));
+       GPIO_PORTF_DATA_R &= ~0x04; /* assert SS low */
+       while((SSI3_SR_R & 2) == 0);/* wait until FIFO not full */
+       SSI3_DR_R = (temp_data>>8);
+       while(SSI3_SR_R & 0x10);    /* wait until transmit complete */
+       SSI3_DR_R = temp_data;      /* transmit high byte */
+       while(SSI3_SR_R & 0x10);    /* wait until transmit complete */
+       GPIO_PORTF_DATA_R |= 0x04;
+       GPIO_PORTF_DATA_R = temp;   /* keep SS idle high */
+  }
+
 }
 
 void Init_PortF(void)
@@ -155,11 +197,12 @@ void Set_initial_stack(int i)
 
 void OS_AddThreads(void (*task0)(void), void(*task1)(void), void(*task2)(void) , void(*task3)(void) )
 {
-    // Here we form a linked list structure chaining all the main threads
+    // Here we form a circular linked list structure chaining all the main threads
     tcbs[0].next = &tcbs[1];
     tcbs[1].next = &tcbs[2];
     tcbs[2].next = &tcbs[3];
-    tcbs[3].next = &tcbs[0];
+    tcbs[3].next = &tcbs[4];
+    tcbs[4].next = &tcbs[0];
 
     // Assigning priorities to each task (lower the number, higher the priority)
     for(int pri = 0; pri < THREAD_NUM ; pri++)
@@ -179,6 +222,9 @@ void OS_AddThreads(void (*task0)(void), void(*task1)(void), void(*task2)(void) ,
 
     Set_initial_stack(3); // Set up dummy stack for task3 that will be used to save the context for task 3
     stacks[3][STACK_SIZE-2] = (long)(task3);  // store the function pointer of task3 in the last but first location of the dummy array of task3
+
+    Set_initial_stack(4);  // Set up dummy stack for task4 that will be used to save the context for task 4
+    stacks[4][STACK_SIZE-2] = (long)(task4); // store the function pointer of task0 in the last but first location of the dummy array of task0
 
     runpt = &tcbs[0]; // Make runpt point to tcb of the first task
 }
@@ -218,13 +264,14 @@ void SysTick_Handler(void)
     // If the count for the current task has been exhausted, then move on to the next task (Compute the count value for the new task to be executed)
     else
     {
-        idx = (idx + 1) % (THREAD_NUM);  // compute the index of the next task to be performed
+//        idx = (idx + 1) % (THREAD_NUM);  // compute the index of the next task to be performed
         runpt = runpt->next;             //make runpt point to the tcb of the next task to be performed
-        switch(idx)
+        switch(runpt->priority)
         {
-           case 0:  count = 10; break;
-           case 1:  count =  5; break;
-           case 2:  count =  2; break;
+           case 0:  count = 10; break; // count = 10;
+           case 1:  count = 5;  break; // count =  5;
+           case 2:  count = 2;  break; // count =  2;
+           case 4:  count = 15; break; // count = 15;
            default: count =  1; break;
         }
     }
