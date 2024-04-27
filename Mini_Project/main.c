@@ -341,66 +341,37 @@ void SysTick_Handler(void)
 
 }
 
-//__attribute__((naked))        // DOUBT : What does naked do ???
+int detectKeyPress()
+{
+    GPIO_PORTE_DATA_R = 0x00 ;   // Drive all the rows of the 4x4 keypad low
+
+    if( (GPIO_PORTC_DATA_R & 0xF0) != 0xF0 )
+        return 1;    // Data in (PC7 - PC4) != 1111  => Some key was pressed
+    else
+        return -1;    // Data in (PC7 - PC4)  = 1111 => No key was pressed
+}
+
+
+// Function to handle key press as interrupts
 void GPIO_PORTC_Handler(void)
 {
-    int num,row,key;
-    if((GPIO_PORTC_MIS_R & 0xF0) != 0x00)
+    DisableInterrupts();
+    for(int i=0;i<80;i++) delay_1ms();
+    for(int i=0; i<THREAD_NUM; i++)
     {
-        GPIO_PORTE_DATA_R = 0x00 ;                 // Drive all the rows of the 4x4 keypad low
-        if( (GPIO_PORTC_DATA_R & 0xF0) != 0xF0 )   // This step is for key press detection
-        {
-            for(row = 0; row < 4; row ++)
-            {
-                if(row == 0)         GPIO_PORTE_DATA_R = 0x0E;      // Driving PE0 low
-                if(row == 1)         GPIO_PORTE_DATA_R = 0x0D;      // Driving PE1 low
-                if(row == 2)         GPIO_PORTE_DATA_R = 0x0B;      // Driving PE2 low
-                if(row == 3)         GPIO_PORTE_DATA_R = 0x07;      // Driving PE3 low
-                num = GPIO_PORTC_DATA_R & 0xF0 ;             // num stores the value of data in PC4 - PC7
-                if(num != 0xF0)                             // Some key was pressed
-                {
-                     switch(num)
-                     {
-                       case 0xE0:         // First column from the left
-                             if(key == 4)
-                             {
-                                   for(int d=0;d<80;d++)  delay_1ms();   // Add a very small delay to overcome de-bouncing issues
-                                   // Change the priority with key press
-                                   for(int j=0;j<THREAD_NUM ; j++)
-                                   {
-                                      tcbs[j].priority = (tcbs[j].priority + 1) % (THREAD_NUM); // Reduce the priority (increment the value) of each task
-                                   }
-                                 debug_var[0] = (row*4)+0;
-                                 debug_var[1] = row;
-                                 break;
-                             }
-                       case 0xD0: debug_var[0] = (row*4)+1; debug_var[1] = row; break;  // 2nd column from the left
-                       case 0xB0: debug_var[0] = (row*4)+2; debug_var[1] = row; break;  // 3rd column from the left
-                       case 0x70: debug_var[0] = (row*4)+3; debug_var[1] = row; break;  // 4th column from the left
-                     }
-                }
-                delay_1ms();  // Add 1ms delay while moving from one row to another
-            }
-
-        }
-
-            // Restore the context of the task that was running before the switch was pressed
-//            asm("LDR R0, =runpt");
-//            asm("LDR R1, [R0]");
-//            asm("LDR SP,[R1]");       // Dereferencing R1 gives "sp" of the new task. This value is loaded to SP so that SP now points to the dummy array of the task that needs to be executed
-//            asm("POP {R4-R11}");      // Transfer the contents of the new task on to the registers R4 - R11 and start executing the new task
-//            asm("CPSIE I");           // Enable interrupts
-//            asm("BX LR");             // What does this do ?
-        }
-    // Clear the interrupts in PC7-PC4
-    GPIO_PORTC_ICR_R = 0xF0;
+        tcbs[i].priority = (tcbs[i].priority + 1) % THREAD_NUM;
+    }
+    GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
+    EnableInterrupts();
 }
 
 // Function to add a delay of 1ms
 void delay_1ms(void)
 {
-    for(int j = 0; j<3180; j++)
+
+    for(int j = 0; j<3000; j++) //3180
        {
             // Do nothing for 1 ms
        }
 }
+
