@@ -341,35 +341,47 @@ void SysTick_Handler(void)
 
 }
 
-int detectKeyPress()
-{
-    GPIO_PORTE_DATA_R = 0x00 ;   // Drive all the rows of the 4x4 keypad low
-
-    if( (GPIO_PORTC_DATA_R & 0xF0) != 0xF0 )
-        return 1;    // Data in (PC7 - PC4) != 1111  => Some key was pressed
-    else
-        return -1;    // Data in (PC7 - PC4)  = 1111 => No key was pressed
-}
 
 
 // Function to handle key press as interrupts
 void GPIO_PORTC_Handler(void)
 {
-    DisableInterrupts();
-    for(int i=0;i<80;i++) delay_1ms();
-    for(int i=0; i<THREAD_NUM; i++)
+//    DisableInterrupts();
+    debug_var[3]+= 1;
+//    for(int i=0;i<80;i++) delay_1ms();
+//    for(int i=0; i<THREAD_NUM; i++)
+//    {
+//        tcbs[i].priority = (tcbs[i].priority + 1) % THREAD_NUM;
+//    }
+
+    // Key Press Detection
+//    int row;
+//    GPIO_PORTE_DATA_R = 0x00;               // Pull all PORTE pins low
+    if((GPIO_PORTC_DATA_R & 0xF0) != 0xF0)  // Key Press Detected
     {
-        tcbs[i].priority = (tcbs[i].priority + 1) % THREAD_NUM;
+        debug_var[4] += 1;
+//        GPIO_PORTE_DATA_R = 0x0E; // Driving PE0 low (First row driven low)
+        GPIO_PORTE_DATA_R = 0x07; // Driving PE3 low   (Last row driven low)
+        debug_var[2] = GPIO_PORTE_DATA_R;
+
+        debug_var[1] = GPIO_PORTC_DATA_R & 0xF0;     // Getting the data in PC7-PC4
+        if((GPIO_PORTC_DATA_R & 0xF0) == 0xE0)
+        {
+            // Dynamically change the priorities of the tasks here
+            for(int wait = 0; wait<80; wait++) delay_1ms();
+            for(int i=0;i<THREAD_NUM;i++)      tcbs[i].priority = (tcbs[i].priority + 1) % THREAD_NUM;
+
+        }
     }
     GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
-    EnableInterrupts();
+//    EnableInterrupts();
 }
 
 // Function to add a delay of 1ms
 void delay_1ms(void)
 {
 
-    for(int j = 0; j<3000; j++) //3180
+    for(int j = 0; j<3180; j++) //3180
        {
             // Do nothing for 1 ms
        }
