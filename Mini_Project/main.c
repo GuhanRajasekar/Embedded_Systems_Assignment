@@ -13,6 +13,7 @@
 #include <main.h>
 #include "sine_table.h"
 #include "periph_ctl.h"
+#include "HeapMem.h"
 
 // Function to initialize Ports A and B
 void Init_PortAB(void)
@@ -125,14 +126,16 @@ void Set_initial_stack(int i)
 
 
 // Function to set up a doubly linked list structure that connects TCBs of all the individual tasks
-void OS_AddThreads(void (*task0)(void), void(*task1)(void), void(*task2)(void) , void(*task3)(void) )
+//void OS_AddThreads(void (*task0)(void), void(*task1)(void), void(*task2)(void) , void(*task3)(void), void(*task4)(void) )
+void OS_AddThreads()
 {
     // Here we form a circular linked list structure chaining all the main threads
     tcbs[0].next = &tcbs[1];
     tcbs[1].next = &tcbs[2];
     tcbs[2].next = &tcbs[3];
     tcbs[3].next = &tcbs[4];
-    tcbs[4].next = &tcbs[0];
+    tcbs[4].next = &tcbs[5];
+    tcbs[5].next = &tcbs[0];
 
     // Assigning priorities to each task (lower the number, higher the priority)
     for(int pri = 0; pri < THREAD_NUM ; pri++)
@@ -154,7 +157,10 @@ void OS_AddThreads(void (*task0)(void), void(*task1)(void), void(*task2)(void) ,
     stacks[3][STACK_SIZE-2] = (long)(task3);  // store the function pointer of task3 in the last but first location of the dummy array of task3
 
     Set_initial_stack(4);  // Set up dummy stack for task4 that will be used to save the context for task 4
-    stacks[4][STACK_SIZE-2] = (long)(task4); // store the function pointer of task0 in the last but first location of the dummy array of task0
+    stacks[4][STACK_SIZE-2] = (long)(task4); // store the function pointer of task4 in the last but first location of the dummy array of task4
+
+    Set_initial_stack(5);  // Set up dummy stack for task5 that will be used to save the context for task 5
+    stacks[5][STACK_SIZE-2] = (long)(task5); // store the function pointer of task5 in the last but first location of the dummy array of task5
 
     runpt = &tcbs[0]; // Make runpt point to tcb of the first task
 }
@@ -176,18 +182,274 @@ void start_os(void)
     asm("BX LR");  // BX is branch instruction
 }
 
+// Memory Management related functions start from this point
+int HeapMemInit(void *pStartAddr, int iHeapSize, int iUnitSize)
+{
+    if(HeapInitFlag ==0)  // The flag check makes sure that heap memory initialization is done only once
+    {
+        pHeapStartAddr = pStartAddr;   // The starting address of the heap memory section is mentioned in "pStartAddr"
+        HeapSize = iHeapSize;          // Total size of the requested memory is mentioned in "iHeapSize"
+
+        //iUnitSize indicates the units in which the requested memory chunk will be allocated.
+        // For example if iHeapSize is 127 and iUnitsize is 64, then 2 blocks of 64 bytes will be allocated
+        if(iUnitSize == 16||iUnitSize == 32||iUnitSize == 64||iUnitSize == 128)
+            HeapUnitSize = iUnitSize;
+        else HeapUnitSize = 16;        // Default value of HeapUnitSize if iUnitSize is not 16,32,64 or 128
+
+        BlockHeaderSize = sizeof(BLOCK_HEADER); // BlockHeaderSize is the size of the structure BLOCK_HEADER (32 bytes when compiled with VSCode)
+
+        // Need to maintain two lists : "Used Block" and "Free Block"
+        // These blocks are initialized as follows
+        psFirstUsedBlock = (BLOCK_HEADER *)pHeapStartAddr; //psFirstUsedBlock stores the starting address of the heap memory section
+        psFirstUsedBlock->uiBlockID = uiBlockID++; // psFirstUsedBlock->uiBlockID = 0. uiBlockID is unique for each block of memory
+        psFirstUsedBlock->pParentBlock = NULL; // First used block of memory has no parent block
+        psFirstUsedBlock->pChildBlock = NULL;  // First used block of memory is initialized with no child
+        psFirstUsedBlock->uiSize = 0;          //
+
+        // another way of saying this would be psFirstFreeBlock = psFirstUsedBlock + 1
+        psFirstFreeBlock = (BLOCK_HEADER *)(pHeapStartAddr+BlockHeaderSize); //psFirstFreeBlock will point to the location after psFirstUsedBlock
+        psFirstFreeBlock->uiBlockID = uiBlockID++; // psFirstFreeBlock->uiBlockID = 1
+        psFirstFreeBlock->pParentBlock = NULL; // First Free block of memory has no parent block
+        psFirstFreeBlock->pChildBlock = NULL;  // First Free block of memory is initialized with no child
+
+        // uiSize of psFirstFreeBlock indicates the total available memory after the initialization of the first free block and the first used block
+        psFirstFreeBlock->uiSize = HeapSize - (BlockHeaderSize*2);
+
+
+        HeapInitFlag =1;     // To make sure that heap memory intialization is done only once
+        return HEAP_SUCCESS; // HEAP_SUCCESS is a macro with value 1
+    }
+    else return HEAP_ERROR;  // HEAP_ERROR   is a macro with value 0
+}
+
+//allocated memory is greater than or equal to no_of_bytes that is requested by the user
+void * MemAlloc(int iNumBytes)
+{
+    BLOCK_HEADER *FreeBlock,*NewFreeBlock,*NewUsedBlock; // These are all pointers to structure BLOCK_HEADER
+    void *pData; // void pointer
+    int iSize;
+
+    // iNumBytes is the size of the requested memory in bytes
+    // iSize is the allocated size of memory which is in multiples of " HeapUnitSize "
+    // iSize will always be greater than or equal to iNumBytes
+    // Because allocating memory greater than or equal to the requested amount is OK but allocating less than the requested amount is NOT OK
+    iSize = FindAllocSize(iNumBytes);
+
+    FreeBlock =(BLOCK_HEADER *)FindUsableFreeBlock(iSize);
+    if(FreeBlock == NULL)
+        return NULL;
+    else
+    {
+        // Available memory space >= (allocated memory + BlockHeaderSize)
+        // The allocated memory must have a label (BlockHeaderSize) attached to it.
+        // Hence while allocating memory, we check if we have enough memory for "user requested space(iSize)" and a label(BlockHeaderSize) for the user requested space
+        if(FreeBlock->uiSize >= (iSize + BlockHeaderSize))
+        {
+            //iSize + BlockHeaderSize will be allocated to the user (user requested space + label for the user requested space)
+            // the NewFreeBlock is the location after that , hence NewFreeBlock = (Old Free Block) + (User Requested Space) + (Label for the user requested space)
+            NewFreeBlock = (BLOCK_HEADER *)(((unsigned int)FreeBlock) + iSize + BlockHeaderSize); // NewFreeBlock points to the location of (Intial free block + requested memory space)
+
+            // Here we set up the connection between the FreeBlock and NewFreeBlock. NewFreeBlock is made the child node of FreeBlock
+            // Available free size is now updated as (old available size) - ((user requested space) + (label for the user requested space)) => Third argument in the InsertBlock Function
+            InsertBlock(FreeBlock,NewFreeBlock,(FreeBlock->uiSize - (iSize + BlockHeaderSize)));
+            DeleteBlock(FreeBlock, FREE_BLOCK); // Since a section has been used, it must be removed from "free" block section
+            NewUsedBlock = FreeBlock; // What was originally FreeBlock now becomes the "NewUsedBlock".
+
+            // Now we need to make the connection between the first used block and the newused block
+            // NewUsedBlock becomes the child node of the psFirstUsedBlock (Recall that originally child node of psFirstUsedBlock was set to NULL in HeapMemInit() function )
+            InsertBlock(psFirstUsedBlock,NewUsedBlock,iSize);
+
+            // We return NewUsedBlock + BlockHeaderSize because every allocated chunk of memory will have a label (BlockHeaderSize)
+            // The user can use the portion that is present after the label (BlockHeaderSize)
+            // Hence we return NewUsedBlock(Starting point) + BlockHeaderSize
+            pData = (void*)((unsigned int)NewUsedBlock + BlockHeaderSize);
+            return pData;
+        }
+
+        // Available memory space < (allocated memory + BlockHeaderSize)
+        else
+        {
+            iSize = FreeBlock->uiSize; // Set iSize to the available size
+            if(HEAP_SUCCESS == DeleteBlock(FreeBlock, FREE_BLOCK))
+            {
+                NewUsedBlock = FreeBlock; // // What was originally FreeBlock now becomes the "NewUsedBlock".
+
+                // Now we need to make the connection between the first used block and the newused block
+                // NewUsedBlock becomes the child node of the psFirstUsedBlock
+                InsertBlock(psFirstUsedBlock,NewUsedBlock,iSize);
+                pData = (void*)((unsigned int)NewUsedBlock + BlockHeaderSize);
+                return pData;
+            }
+            else
+                return NULL;
+        }
+    }
+}
+
+int FindAllocSize(int iNumBytes)
+{
+    int Count;
+
+    // HeapUnitSize is initialized in the function HeapMemInit()
+    Count = iNumBytes /HeapUnitSize;
+
+    // Assume iNumBytes = 127 and HeapUnitSize = 64. In this case Count = 127/64 = 1 as Count is "int" type variable
+    // But for 127 bytes of memory , we need two units of "64" bytes of memory (extra space is OK but less than what is required is NOT OK)
+    // Hence, in this case iNumBytes > (Count*HeapUnitSize) => 127 > (1*64) => Count is made 2
+    // And we return (Count*HeapUnitSize) => (2*64) => 128 bytes of memory
+    // So this function makes sure that we always return a chunk of memory that is greater than or equal to what is required, but never below it.
+    if(iNumBytes > (Count*HeapUnitSize))Count += 1;
+
+    return (Count*HeapUnitSize);
+}
+
+void* FindUsableFreeBlock(int iSize)
+{
+    BLOCK_HEADER *CurrentBlock;  // Current Block is a pointer pointing to a vriable of structure type BLOCK_HEADER
+
+    // The "psFirstFreeBlock" was initialized with the location of the first free memory section in the function HeapMemInit()
+    CurrentBlock = psFirstFreeBlock;
+    while (CurrentBlock->uiSize < iSize)
+    {
+        if(CurrentBlock->pChildBlock == NULL)
+        {
+            return NULL;
+        }
+        else
+        {
+            CurrentBlock = (BLOCK_HEADER *)(CurrentBlock->pChildBlock);
+        }
+    }
+    return CurrentBlock;
+}
+
+int InsertBlock(void *pCurrentBlock, void *pNewBlock, int iSize)
+{
+    BLOCK_HEADER *CurrentBlock,*NewBlock,*ChildBlock;
+
+    CurrentBlock = (BLOCK_HEADER *)pCurrentBlock;
+    NewBlock = (BLOCK_HEADER *)pNewBlock;
+
+    NewBlock->uiBlockID = uiBlockID++;      // incrementing the block ID for the new block of memory
+    NewBlock->pParentBlock = CurrentBlock;  // Current block becomes the parent block for the new block
+    NewBlock->pChildBlock = CurrentBlock->pChildBlock;
+
+    // Similar to inserting a node in a linked list
+    if(CurrentBlock->pChildBlock != NULL)
+    {
+        ChildBlock = (BLOCK_HEADER *)CurrentBlock->pChildBlock;
+        ChildBlock->pParentBlock = NewBlock;
+    }
+    NewBlock->uiSize = iSize;
+
+    CurrentBlock->pChildBlock = NewBlock ;
+
+    // This function changes " CurrentBlock -> ChildBlock"  to " CurrentBlock -> NewBlock -> ChildBlock"
+
+    return HEAP_SUCCESS;
+}
+
+int DeleteBlock(void *pBlock,  int BlockType)
+{
+    BLOCK_HEADER *Block,*ParentBlock,*ChildBlock;
+
+    Block = (BLOCK_HEADER *)pBlock;
+
+    if((Block->pParentBlock == NULL) && (Block->pChildBlock == NULL)) //Pivot Block Cannot be deleted
+    {
+        return HEAP_ERROR;
+    }
+    else
+    {
+        // Similar to deleting the first node of a linkedlist
+        if(Block->pParentBlock == NULL) // if it was the first block (first block has no parent block)
+        {
+            ChildBlock = (BLOCK_HEADER *)(Block->pChildBlock);
+            ChildBlock->pParentBlock = NULL;
+            if(BlockType == FREE_BLOCK)
+                 psFirstFreeBlock = ChildBlock;
+            else if(BlockType == USED_BLOCK)
+                 psFirstUsedBlock = ChildBlock;
+        }
+
+        // Similar to deleting the last node of a linked list
+        else if (Block->pChildBlock == NULL)// if it was the last block (last block has no child block)
+        {
+            ParentBlock = (BLOCK_HEADER *)(Block->pParentBlock);
+            ParentBlock->pChildBlock = NULL;
+        }
+
+        // Similar to deleting an intermediate node of the linked list
+        else
+        {
+            ChildBlock = (BLOCK_HEADER *)(Block->pChildBlock);
+            ParentBlock = (BLOCK_HEADER *)(Block->pParentBlock);
+            ChildBlock->pParentBlock = ParentBlock;
+            ParentBlock->pChildBlock = ChildBlock;
+        }
+        return HEAP_SUCCESS;
+    }
+}
+
+//Frees up the chunks (a block) of allocated memory and makes it available for the future use
+int MemFree(void *pData)
+{
+    BLOCK_HEADER *UsedBlock,*NewFreeBlock;
+    int iSize;
+
+    UsedBlock = (BLOCK_HEADER *)((unsigned int)pData - BlockHeaderSize);
+    iSize = UsedBlock->uiSize;
+    if(HEAP_SUCCESS == DeleteBlock(UsedBlock, USED_BLOCK))
+    {
+        NewFreeBlock = UsedBlock;
+        InsertBlock(psFirstFreeBlock,NewFreeBlock,iSize);
+        MergeFreeBlocks();
+        return HEAP_SUCCESS;
+    }
+    else return HEAP_ERROR;
+}
+
+void MergeFreeBlocks(void)
+{
+    BLOCK_HEADER *CurrentBlock, *NextBlock;
+    unsigned int CurrentBlockEnd;
+
+    CurrentBlock = psFirstFreeBlock;
+
+    while (CurrentBlock != NULL)
+    {
+        CurrentBlockEnd = (((unsigned int)CurrentBlock) + BlockHeaderSize + CurrentBlock->uiSize);
+        NextBlock = psFirstFreeBlock;
+        while (NextBlock != NULL)
+        {
+            if((unsigned int)NextBlock == CurrentBlockEnd)
+            {
+                CurrentBlock->uiSize += (NextBlock->uiSize + BlockHeaderSize);
+                DeleteBlock(NextBlock, FREE_BLOCK);
+                break;
+            }
+            NextBlock = (BLOCK_HEADER *)(NextBlock->pChildBlock);
+        }
+        CurrentBlock = (BLOCK_HEADER *)(CurrentBlock->pChildBlock);
+    }
+}
+
 
 int main()
 {
-    DisableInterrupts();          // Disable the interrupts
-    Init_PortAB();                // Initialize ports A and B
-    Init_PortC();                 // Initialize Port C
-    Init_PortE();                 // Intialize Port E
-    Init_PortF();                 // Initialize Port F
-    Init_Systick();               // Initialize Systick Timer
+    DisableInterrupts();                                 // Disable the interrupts
+    heap_start = (unsigned int)&__heap_start__;          // storing the start  address of heap memory section
+    heap_end   = (unsigned int)&__heap_end__;            // storing the ending address of heap memory section
+    mem = HeapMemInit((void*)heap_start, 128 , 16);      // Heap memory initialization (128 bytes of memory in chunks of 16 bytes)
+    Init_PortAB();                                       // Initialize ports A and B
+    Init_PortC();                                        // Initialize Port C
+    Init_PortE();                                        // Intialize Port E
+    Init_PortF();                                        // Initialize Port F
+    Init_Systick();                                      // Initialize Systick Timer
 
-    configure_spi();
-    OS_AddThreads(&task0, &task1, &task2, &task3);
+    configure_spi();                                     // Configure the spi to send values to DAC
+    OS_AddThreads();                                     // Form a linked list, chaining the TCBs of the tasks together
+    //    OS_AddThreads(&task0, &task1, &task2, &task3, &task4);
     start_os();
     return 0; // Program Control never reaches this point
 }
@@ -268,14 +530,16 @@ void task3(void)
         }
 }
 
-/*task 4 sends value to LTC1661 DAC to generate sinusoidal waveform and view it on the oscilloscope*/
+/*task 4 keeps Magenta LED ON sends value to LTC1661 DAC to generate sinusoidal waveform and view it on the oscilloscope*/
 void task4(void)
 {
   while(1)
   {
+       GPIO_PORTF_DATA_R = 0x06;             // Magenta LED
        sin_index = (sin_index+1)%127;        // Increment the index to send the next value
        data      =  sine[sin_index];         // Pick a value to be sent from the look up table
        unsigned int command   =  0x9000;     // To send value on Channel A
+       debug_var[4] = data;                  // This will be used for viewing purposes
 
        int temp =  GPIO_PORTF_DATA_R ;
        unsigned temp_data = ((data<<2)|(command));
@@ -288,6 +552,42 @@ void task4(void)
        GPIO_PORTF_DATA_R |= 0x04;
        GPIO_PORTF_DATA_R = temp;   /* keep SS idle high */
   }
+}
+
+
+void task5(void)
+{
+
+   void* ptr;
+   int flag = 0;
+   int* ptr_task5;
+   while(1)
+   {
+       GPIO_PORTF_DATA_R = 0x0A;             // Yellove LED
+       if(mem == 1)  // Heap Memory Initialization was successful
+       {
+          if(flag == 0)
+          {
+              ptr = MemAlloc(16);      // Request 16 bytes of memory from Heap Section
+              ptr_task5 = (int *)ptr;  // Store the starting address of allocated memory in ptr_task5 pointer
+              *ptr_task5 = 0;          // Initialize 0 in the location pointed to by ptr_task5
+              flag = 1;
+          }
+          else
+          {
+              debug_var[5] = *ptr_task5;
+              *ptr_task5 = *ptr_task5 + 1;
+              for(int i=1;i<=500;i++) delay_1ms();  // wait for 0.5s
+              if(*ptr_task5 == 11)
+              {
+                  MemFree(ptr);  // To Free up the memory
+                  flag = 0;      // Start the process all over again
+              }
+          }
+
+       }
+   }
+
 }
 
 // Function to enable interrupts
@@ -346,25 +646,14 @@ void SysTick_Handler(void)
 // Function to handle key press as interrupts
 void GPIO_PORTC_Handler(void)
 {
-//    DisableInterrupts();
-    debug_var[3]+= 1;
-//    for(int i=0;i<80;i++) delay_1ms();
-//    for(int i=0; i<THREAD_NUM; i++)
-//    {
-//        tcbs[i].priority = (tcbs[i].priority + 1) % THREAD_NUM;
-//    }
-
-    // Key Press Detection
-//    int row;
-//    GPIO_PORTE_DATA_R = 0x00;               // Pull all PORTE pins low
+    debug_var[0]+= 1;
     if((GPIO_PORTC_DATA_R & 0xF0) != 0xF0)  // Key Press Detected
     {
-        debug_var[4] += 1;
-//        GPIO_PORTE_DATA_R = 0x0E; // Driving PE0 low (First row driven low)
+        debug_var[1] += 1;
         GPIO_PORTE_DATA_R = 0x07; // Driving PE3 low   (Last row driven low)
         debug_var[2] = GPIO_PORTE_DATA_R;
 
-        debug_var[1] = GPIO_PORTC_DATA_R & 0xF0;     // Getting the data in PC7-PC4
+        debug_var[3] = GPIO_PORTC_DATA_R & 0xF0;     // Getting the data in PC7-PC4
         if((GPIO_PORTC_DATA_R & 0xF0) == 0xE0)
         {
             // Dynamically change the priorities of the tasks here
@@ -374,7 +663,6 @@ void GPIO_PORTC_Handler(void)
         }
     }
     GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
-//    EnableInterrupts();
 }
 
 // Function to add a delay of 1ms

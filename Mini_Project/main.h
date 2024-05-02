@@ -8,7 +8,7 @@
 //#define NO_COLOR           0x00  // No color
 
 #define STACK_SIZE 100 // size of the dummy array that will be used to save the context of a particular task before task switching
-#define THREAD_NUM 5   // defining the max  number of threads(tasks)
+#define THREAD_NUM 6   // defining the max  number of threads(tasks)
 struct tcb
 {
     long* sp;           // pointer that will point to the Stack of that particular task
@@ -37,10 +37,15 @@ void task1(void);   /* task 1 makes the BLUE LED ON continuously and displays it
 void task2(void);   /* task 2 makes the GREEN LED ON continuously and displays its count on the third SSD from the right*/
 void task3(void);   /* task 3 makes the WHITE LED ON continuously and displays its count on the second SSD from the right*/
 void task4(void);   /* task 4 is to send sin wave values from the look up table to LTC 1661 DAC*/
+void task5(void);   /* task5 makes use of dynamically allocated memory to do its function */
 
 void start_os(void);
 void Set_initial_stack(int i);  // Function to set up the initial stack
-void OS_AddThreads(void(*task0)(void), void(*task1)(void),void(*task2)(void),void(*task3)(void)); // Function to add threads using function pointers
+
+// Function to add threads using function pointers
+void OS_AddThreads(void);
+//void OS_AddThreads(void(*task0)(void), void(*task1)(void),void(*task2)(void),void(*task3)(void),void(*task4)(void));
+
 void delay_1ms(void);  // Function to add a delay of 1ms
 int detectKeyPress(void);  // Function to detect key press
 int processKeyPress(void); // Function for key press identification
@@ -62,5 +67,14 @@ int debug_var[50];     // Variable used for debugging purposes
 int sin_index = 0;     // index to send the sin values in the lookup table
 int num = 0;           // To indicate the key that was pressed in the 4x4 keypad display
 unsigned int data = 0; // variable to hold the sin value that is sent to the LTC 1661 DAC
+int mem = -1;          // variable to store the return value of HeapMemInit() function
 
+// For debugging purposes
+extern unsigned int __heap_start__;
+extern unsigned int __heap_end__;
+extern unsigned int __HeapLimit;
+extern unsigned int _stack;
+extern unsigned int __bss_start__;
+unsigned int heap_start;
+unsigned int heap_end;
 
