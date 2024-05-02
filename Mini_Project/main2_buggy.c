@@ -15,18 +15,8 @@
 #include "periph_ctl.h"
 #include "HeapMem.h"
 #include "GPIO.h"
-#include "LCD.h"
 
-// Function to initialize UART
-void Init_UART(void)
-{
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    GPIOPinConfigure(GPIO_PA0_U0RX);
-    GPIOPinConfigure(GPIO_PA1_U0TX);
-    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-    UARTConfigSetExpClk(UART0_BASE, SysCtlClockGet(), 115200,(UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
-}
+
 // Function to initialize Systick Timer
 void Init_Systick(void)
 {
@@ -96,8 +86,8 @@ void OS_AddThreads()
     Set_initial_stack(5);  // Set up dummy stack for task5 that will be used to save the context for task 5
     stacks[5][STACK_SIZE-2] = (long)(task5); // store the function pointer of task5 in the last but first location of the dummy array of task5
 
-    Set_initial_stack(6);  // Set up dummy stack for task5 that will be used to save the context for task 5
-    stacks[6][STACK_SIZE-2] = (long)(task6); // store the function pointer of task5 in the last but first location of the dummy array of task5
+    Set_initial_stack(6);  // Set up dummy stack for task5 that will be used to save the context for task 6
+    stacks[6][STACK_SIZE-2] = (long)(task6); // store the function pointer of task6 in the last but first location of the dummy array of task6
 
     runpt = &tcbs[0]; // Make runpt point to tcb of the first task
 }
@@ -122,16 +112,23 @@ void start_os(void)
 int main()
 {
     DisableInterrupts();                                 // Disable the interrupts
+    heap_start = (unsigned int)&__heap_start__;          // storing the start  address of heap memory section
+    heap_end   = (unsigned int)&__heap_end__;            // storing the ending address of heap memory section
     mem = HeapMemInit((void*)heap_start, 128 , 16);      // Heap memory initialization (128 bytes of memory in chunks of 16 bytes)
     Init_PortAB();                                       // Initialize ports A and B
     Init_PortC();                                        // Initialize Port C
     Init_PortE();                                        // Intialize Port E
     Init_PortF();                                        // Initialize Port F
     Init_Systick();                                      // Initialize Systick Timer
-    Init_UART();                                         // Function to initialize UART
 
-    LCD_init();
-    LCD_PutData("Task Scheduler",14);
+    //UART Initialization
+
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    GPIOPinConfigure(GPIO_PA0_U0RX);
+    GPIOPinConfigure(GPIO_PA1_U0TX);
+    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    UARTConfigSetExpClk(UART0_BASE, SysCtlClockGet(), 115200,(UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
 
     configure_spi();                                     // Configure the spi to send values to DAC
     OS_AddThreads();                                     // Form a linked list, chaining the TCBs of the tasks together
@@ -146,7 +143,6 @@ void task0(void)
     int i = 0;
     while(1)
     {
-        GPIO_PORTE_DATA_R = 0x00;             // To make sure PortC values change for interrupt handling
         GPIO_PORTF_DATA_R = 0x02;  // red color LED
         if(i > 9)
             i = 0;
@@ -162,11 +158,9 @@ void task0(void)
 /* task 1 makes the BLUE LED ON continuously and displays its count on the second SSD from the right*/
 void task1(void)
 {
-
     int j = 0;
     while(1)
     {
-        GPIO_PORTE_DATA_R = 0x00;             // To make sure PortC values change for interrupt handling
         GPIO_PORTF_DATA_R = 0x04;  // Blue LED
 
              if(j>9)
@@ -188,7 +182,6 @@ void task2(void)
     int k = 0;
     while(1)
     {
-        GPIO_PORTE_DATA_R = 0x00;             // To make sure PortC values change for interrupt handling
         GPIO_PORTF_DATA_R = 0x08;  // Green color LED
               if(k>9)
                   k = 0;
@@ -204,11 +197,9 @@ void task2(void)
 /* task 3 makes the WHITE LED ON continuously and displays its count on the second SSD from the right*/
 void task3(void)
 {
-
         int l = 0;
         while(1)
         {
-            GPIO_PORTE_DATA_R = 0x00;             // To make sure PortC values change for interrupt handling
             GPIO_PORTF_DATA_R = 0x0e;  // white LED
                   if(l>9)
                       l = 0;
@@ -227,7 +218,6 @@ void task4(void)
 {
   while(1)
   {
-       GPIO_PORTE_DATA_R = 0x00;             // To make sure PortC values change for interrupt handling
        GPIO_PORTF_DATA_R = 0x06;             // Magenta LED
        sin_index = (sin_index+1)%127;        // Increment the index to send the next value
        data      =  sine[sin_index];         // Pick a value to be sent from the look up table
@@ -247,43 +237,70 @@ void task4(void)
   }
 }
 
-// task5 does computation in the memory allocated dynamically
+
 void task5(void)
 {
 
-   void* ptr1;
-   int flag1 = 0;
+   void* ptr;
+   char location[100];
+   int flag = 0;
    int* ptr_task5;
    while(1)
    {
-//       GPIO_PORTE_DATA_R = 0x00;             // To make sure PortC values change for interrupt handling
-//       GPIO_PORTF_DATA_R = 0x0A;             // Yellove LED
-//       if(mem == 1)  // Heap Memory Initialization was successful
-//       {
-//          if(flag1 == 0)
-//          {
-//              ptr1 = MemAlloc(16);       // Request 16 bytes of memory from Heap Section
-//              ptr_task5  = (int *)ptr1;  // Store the starting address of allocated memory in ptr_task5 pointer
-//              debug_ptr1 = ptr1;         // Display this value for debug purposes
-//              *ptr_task5 = 0;            // Initialize 0 in the location pointed to by ptr_task5
-//              flag1 = 1;
-//          }
-//          else
-//          {
-//              debug_var[5] = *ptr_task5;   // displaying the value for debug purposes
-//              *ptr_task5 = *ptr_task5 + 1; // To do some operation in the allocated memory space
-//              for(int i=1;i<=500;i++) delay_1ms();  // wait for 0.5s
-//              if(*ptr_task5 == 11)
-//              {
-//                  DisableInterrupts();  // Disable the interrupt when you are trying to free up the used memory
-//                  MemFree(ptr1);        // To Free up the memory
-//                  debug_ptr1 = ptr1;    // Display this value for debug purposes
-//                  flag1 = 0;            // Start the process all over again
-//                  EnableInterrupts();   // Once memory deallocation is done, enable the interrupts again
-//              }
-//          }
-//
-//       }
+       GPIO_PORTF_DATA_R = 0x0A;             // Yellove LED
+       if(mem == 1)  // Heap Memory Initialization was successful
+       {
+          if(flag == 0)
+          {
+              ptr = MemAlloc(16);      // Request 16 bytes of memory from Heap Section
+              debug_ptr1 = ptr;        // For display purposes
+              ptr_task5 = (int *)ptr;  // Store the starting address of allocated memory in ptr_task5 pointer
+              *ptr_task5 = 0;          // Initialize 0 in the location pointed to by ptr_task5
+              flag = 1;
+              itoa((int)ptr , location , 10); // The third argument 10 denotes decimal base
+              char str1[100] = "Dynamic Memory has been allocated for task 5 at location ";
+              strcat(str1 , location);
+              int m = 0;
+              UARTCharPut(UART0_BASE, '\n');
+              UARTCharPut(UART0_BASE, '\r');
+              while(str1[m] != '\0')
+                {
+                   UARTCharPut(UART0_BASE, str1[m]);
+                   m = m+1;
+                }
+              UARTCharPut(UART0_BASE, '\n');
+              UARTCharPut(UART0_BASE, '\r');
+          }
+          else
+          {
+
+              debug_var[5] = *ptr_task5;
+              *ptr_task5 = *ptr_task5 + 1;
+              for(int i=1;i<=500;i++) delay_1ms();  // wait for 0.5s
+              if(*ptr_task5 == 11)
+              {
+                  MemFree(ptr);  // To Free up the memory
+                  char str2[100] = "Memory allocated at location ";
+                  strcat(str2, location);
+                  char str3[100] = " has been deallocated";
+                  strcat(str2,str3);
+                  flag = 0;      // Start the process all over again
+
+                  int n = 0;
+                  UARTCharPut(UART0_BASE, '\n');
+                  UARTCharPut(UART0_BASE, '\r');
+                  while(str2[n] != '\0')
+                    {
+                       UARTCharPut(UART0_BASE, str2[n]);
+                       n = n+1;
+                    }
+                  UARTCharPut(UART0_BASE, '\n');
+                  UARTCharPut(UART0_BASE, '\r');
+
+              }
+          }
+
+       }
    }
 
 }
@@ -327,7 +344,6 @@ void task6(void)
     }
 }
 
-
 // Function to enable interrupts
 void EnableInterrupts(void)
 {
@@ -342,7 +358,7 @@ void DisableInterrupts(void)
 
 
 // Systick_Handler() function is the preemptive scheduler that will determine which background task needs to be run next
-__attribute__((naked))
+__attribute__((naked))        // DOUBT : What does naked do ???
 void SysTick_Handler(void)
 {
     // The following 5 lines of assembly code will help us save the context of the background task that is currently running
@@ -361,13 +377,13 @@ void SysTick_Handler(void)
         runpt = runpt->next;             //make runpt point to the tcb of the next task to be performed
         switch(runpt->priority)
         {
-           case 0:  count = 15; break; // count = 10;
-           case 1:  count = 10; break; // count =  5;
-           case 2:  count = 8;  break; // count =  2;
-           case 4:  count = 6;  break; // count = 15;
-           case 5:  count = 4;  break;
-           case 6:  count = 2;  break;
-           default: count = 1;  break;
+           case 0:  count = 15;  break;
+           case 1:  count = 10;  break;
+           case 2:  count =  8;  break;
+           case 4:  count =  6;  break;
+           case 5:  count =  4;  break;
+           case 6:  count =  2;  break;
+           default: count =  1;  break;
         }
     }
 
@@ -386,20 +402,64 @@ void SysTick_Handler(void)
 // Function to handle key press as interrupts
 void GPIO_PORTC_Handler(void)
 {
+    debug_var[0]+= 1;
     if((GPIO_PORTC_DATA_R & 0xF0) != 0xF0)  // Key Press Detected
     {
         debug_var[1] += 1;
-        GPIO_PORTE_DATA_R = 0x07;
+        GPIO_PORTE_DATA_R = 0x07; // Driving PE3 low   (Last row driven low)
+        debug_var[2] = GPIO_PORTE_DATA_R;
+
+        debug_var[3] = GPIO_PORTC_DATA_R & 0xF0;     // Getting the data in PC7-PC4
         if((GPIO_PORTC_DATA_R & 0xF0) == 0xE0)
         {
             // Dynamically change the priorities of the tasks here
             for(int wait = 0; wait<80; wait++) delay_1ms();
             for(int i=0;i<THREAD_NUM;i++)      tcbs[i].priority = (tcbs[i].priority + 1) % THREAD_NUM;
         }
-//        else if((GPIO_PORTC_DATA_R & 0xF0) == 0xD0) { LCD_PutData("Guhan Rajasekar",15);}
-//        else if((GPIO_PORTC_DATA_R & 0xF0) == 0xB0) { LCD_PutData("Sai Krishna",11);}
-//        else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70) { LCD_PutData("IISc DESE",9);}
+
+        else if((GPIO_PORTC_DATA_R & 0xF0) == 0xD0)
+        {
+            char* p = "Inhale.... Exhale.....and Repeat\n";
+            int m = 0; // for indexing purposes
+            for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
+            while(p[m] != '\0')
+              {
+                 UARTCharPut(UART0_BASE, p[m]);
+                 m = m+1;
+              }
+            UARTCharPut(UART0_BASE, '\n');
+            UARTCharPut(UART0_BASE, '\r');
+        }
+
+        else if((GPIO_PORTC_DATA_R & 0xF0) == 0xB0)
+        {
+            char* q = "This mini project is a Pre-Emptive Task Scheduler done as part of Embedded Systems Course\n";
+            int j = 0; // for indexing purposes
+            for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
+            while(q[j] != '\0')
+              {
+                 UARTCharPut(UART0_BASE, q[j]);
+                 j = j+1;
+              }
+            UARTCharPut(UART0_BASE, '\n');
+            UARTCharPut(UART0_BASE, '\r');
+        }
+
+        else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70)
+        {
+            char* r = "Process is more important than the results\n";
+            int k = 0; // for indexing purposes
+            for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
+            while(r[k] != '\0')
+              {
+                 UARTCharPut(UART0_BASE, r[k]);
+                 k = k+1;
+              }
+            UARTCharPut(UART0_BASE, '\n');
+            UARTCharPut(UART0_BASE, '\r');
+        }
     }
+
     GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
 }
 
@@ -412,4 +472,3 @@ void delay_1ms(void)
             // Do nothing for 1 ms
        }
 }
-
