@@ -1,0 +1,10 @@
+"./main.o"
+"./startup_ccs.o"
+"./drivers/buttons.o"
+"./drivers/rgb.o"
+"./utils/uartstdio.o"
+"./utils/ustdlib.o"
+-Wl,--start-group
+"C:/Users/elsak/OneDrive/Documents/Elsa/IISc_ESE/Sem2/Embedded Systems/Labs/Lab2/uart/uart/libdriver.a"
+-lc
+-Wl,--end-group
