@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "heapmem.h": "c",
+        "math.h": "c"
+    }
+}

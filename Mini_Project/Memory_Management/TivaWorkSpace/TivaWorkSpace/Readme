@@ -1,0 +1,53 @@
+
+Inorder to do different lab assignments wrapper drivers were made for
+all the peripherals we used in the assignments. and these drivers are 
+split in to one *.c and one *.h file per device and are arranged in the 
+project folder structure 
+
+this driver set was used to write all application programs 
+
+only one pproject is created for all the lab assignments "TivawareProject"
+
+Only the AppMain.c file is changed in the assignments and a backup of all
+these AppMain.C files is kept in ECSDWorkSpace/AppmainAll folder
+
+The folder structure of the ECSDLabProject is as follows
+
+Debug - folder created by CCS for uotput and temp files
+
+Headers				- All header files
+	App
+		"App.h"
+	Genlib
+		"GenLib.h"  	- hardware independent lib
+	Devices
+ 		"TIResources.h"
+		"Clock.h"
+		"SysTimer.h"
+		"Timer.h"
+		"UART.h"
+		"KeyBoard.h"
+ 		"LED.h"
+		"DigitalOutputPort.h"
+		"DigitalInputPort.h"
+		"ADC.h"
+		"PWM.h"
+		"Devices.h"
+
+Source				- All source, *.c files
+	App
+		"AppMain.c"
+	Genlib
+		"GenLib.c"  	- hardware independent lib
+	Devices
+ 		"Clock.c"
+		"SysTimer.c"
+		"Timer.c"
+		"UART.c"
+		"KeyBoard.c"
+ 		"LED.c"
+		"DigitalOutputPort.c"
+		"DigitalInputPort.c"
+		"ADC.c"
+		"PWM.c"			
+ 
