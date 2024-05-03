@@ -42,7 +42,7 @@
 #include "sensorlib/ak8975.h"
 #include "sensorlib/mpu9150.h"
 #include "sensorlib/comp_dcm.h"
-#include "drivers/rgb.h"
+//#include "drivers/rgb.h"
 #include <math.h>
 #include <string.h>
 #include "driverlib/pwm.h"
@@ -118,10 +118,10 @@
  void BMP180_IN_IT();
 
 
-#define ALPHA 0.1f
-#define GREEN_ON GPIO_PORTF_DATA_R =0x08
+#define ALPHA 0.4f
+#define GREEN_ON GPIO_PORTF_DATA_R = 0x08
 #define RED_ON (GPIO_PORTF_DATA_R = 0x02)
-#define YELLOW_ON GPIO_PORTF_DATA_R =0x0A  // turn on red and green
+#define YELLOW_ON GPIO_PORTF_DATA_R = 0x0A  // turn on red and green
 #define OFF GPIO_PORTF_DATA_R=0x00        // turn of all leds
 #define  PWM_FREQUENCY_MOTOR 1000
 #define  PWM_FREQUENCY 50
@@ -143,10 +143,10 @@ uint32_t time; /*stores pulse on time */
 uint32_t distance; /* stores measured distance value */
 char mesg[240];  /* string format of distance value */
 int frac,servo_delay;
-int real,status,speed,PWMout_H,PWMout_T,pulse;
+int real, X,status,speed,PWMout_H,PWMout_T,pulse;
 char version[30];
-float pitch, yaw,Filteredpitch =0.0, prevpitch=0.0, prevyaw=0.0,Filteredyaw=0.0, prevMag_z=0.0, Distance;
-float X,Y,Z, temp_T,temp_H,Mag_z,time1,diff;
+float pitch, yaw,Filteredpitch =0.0, prevpitch=0.0, prevyaw=0.0,Filteredyaw=0.0, prevMag_z=0.0,FilteredMag_z=0.0, Distance;
+floatY,Z, temp_T,temp_H,Mag_z,time1,diff;
 float fTemperature, fPressure, fAltitude;
    int32_t i32PIntegerPart;
    int32_t i32PFractionPart;
@@ -638,7 +638,7 @@ void MPU9150_IN_IT(){
     //
     // Enable blinking indicates config finished successfully
     //
-    //RGBBlinkRateSet(1.0f);
+   // RGBBlinkRateSet(1.0f);
 
     ui32CompDCMStarted = 0;
 
@@ -745,8 +745,9 @@ void BMP180()
     //
 
       if (Alt-prev_Alt>40.0)
-      {
-          status = 5;
+      {    RED_ON;
+          UARTprintf("\r\033[22;2H                                  ");
+          UARTprintf("\r\033[22;2H FREE FALL\n");
           prev_Alt= Alt;
          // mode();
 
@@ -769,6 +770,7 @@ void MPU9150()
     //
           // Go to sleep mode while waiting for data ready.
           //
+       // delayMs(100);
           while(!g_vui8I2CDoneFlag)
           {
               ROM_SysCtlSleep();
@@ -945,52 +947,55 @@ void MPU9150()
               UARTprintf("\033[19;68H%3d.%03d", i32IPart[15], i32FPart[15]);
               pitch = i32IPart[9];
               yaw = i32IPart[11]+i32IPart[11]/1000;
-           //   Filteredpitch = lowPassFilter(pitch, Filteredpitch);
-           //   Filteredyaw = lowPassFilter(yaw, Filteredyaw);
-//              Y_I= Filteredyaw;
-//              Y_F = Filteredyaw*1000-Filteredyaw;
-//              Y_F = Y_F%1000;
-//              X_I= Filteredpitch;
-//              X_F = abs(Filteredpitch*1000-Filteredpitch);
-//              X_F = X_F%1000;
-//              Z = pfGyro[2];
-//              X = (atan2(pfAccel[0], sqrt (pfAccel[1] * pfAccel[1] + pfAccel[2] * pfAccel[2]))*180.0)/3.14;
-//              Y = (atan2(pfAccel[1], sqrt (pfAccel[0] * pfAccel[0] + pfAccel[2] * pfAccel[2]))*180.0)/3.14;
-//              Z_I= Z;
-//              Z_F = Z*1000-Z;
-//              Y_I= Y;
-//              Y_F = Y*1000-Y;
-//              X_I= X;
-//              X_F = X*1000-X;
-//              X_F = X_F%1000;
+              Filteredyaw = lowPassFilter(yaw, Filteredyaw);
               UARTprintf("\nPITCH:%3d.%03d,YAW:%3d.%03d,Z:%3d.%03d \n",X_I,X_F,Y_I,Y_F,Z_I,Z_F);
               Mag_z= i32IPart[8]+i32FPart[8]/1000;
-              if (Mag_z-prevMag_z<5.0)
+              FilteredMag_z = lowPassFilter(yaw, FilteredMag_z);
+              if (abs(Mag_z-prevMag_z)<1.0)
               {
 
-                  if(Distance > 30 ) {status = 1;} // Adding the distance check so that FLIGHT MODE does not Over-Ride OBSTACLE MODE
+                  if(Distance < 30 )
+                  {
+                     YELLOW_ON;
+                     Delay_MicroSecond(1000);
+                     OFF;
+                     Delay_MicroSecond(1000);
+                     UARTprintf("\r\033[22;2H                                  ");
+                     UARTprintf("\r\033[22;2H OBSTACLE DETECTED\n");
+                  } // Adding the distance check so that FLIGHT MODE does not Over-Ride OBSTACLE MODE
+                  else
+                  {
+                      GREEN_ON;
+                      UARTprintf("\r\033[22;2H                                  ");
+                      UARTprintf("\r\033[22;2H FLIGHT MODE\n");
+                  }
                   prevMag_z= Mag_z;
 
 
               }
-              else if(Mag_z-prevMag_z>5.0){
-//                  status = 2;
+              else if(abs(Mag_z-prevMag_z)>1.0){
+                  GREEN_ON;
+                  Delay_MicroSecond(1000);
+                  OFF;
+                  Delay_MicroSecond(1000);
                   prevMag_z= Mag_z;
-               //   mode();
+                  UARTprintf("\r\033[22;2H                                  ");
+                  UARTprintf("\r\033[22;2H ASCENDING OR DESCENDING MODE\n");
+
               }
-              if (abs(yaw-prevyaw)<=2 )
+              if (abs(Filteredyaw-prevyaw)<=2 )
               {
-                  prevyaw =yaw;
+                  prevyaw =Filteredyaw;
                   speed=0;
               }
-              else if ((yaw-prevyaw)>2)
+              else if ((Filteredyaw-prevyaw)>2)
                     {
-                        prevyaw =yaw;
+                        prevyaw =Filteredyaw;
                         speed=2;
                     }
-              else if ((yaw-prevyaw)<-2)
+              else if ((Filteredyaw-prevyaw)<-2)
               {
-                  prevyaw =yaw;
+                  prevyaw =Filteredyaw;
                   speed=1;
               }
               UARTprintf("\n\033[24;2Hspeed:%d",speed);
@@ -1003,7 +1008,8 @@ void mode(){
     switch(status){
        case 3:
             debug[11]+= 1;
-            GPIO_PORTF_DATA_R = 0x00; //Yellow
+            OFF;
+            RED_ON; //Yellow
             UARTprintf("\r\033[22;24H                                  ");
             UARTprintf("\r\033[22;24H OBSTACLE DETECTED\n");
 
@@ -1011,14 +1017,15 @@ void mode(){
 
         case 1:
                debug[10] += 1;
-                GPIO_PORTF_DATA_R = 0x08; // Green
+               OFF;
+                GREEN_ON; // Green
                // LCD_PutData("Flight",12);
                 UARTprintf("\r\033[22;24H                                   ");
                 UARTprintf("\r\033[22;24H FLIGHT MODE\n");
 
                 //instruction();
                 break;
-        case 2:
+        case 2:  OFF;
                 GREEN_ON;
                 delayMs(100);
                 OFF;
@@ -1028,11 +1035,12 @@ void mode(){
                // LCD_PutData("Flight1",12);
 
                 break;
-        case 4:
+        case 4:  OFF;
                 UARTprintf("\r                                   ");
                 break;
 
-        case 5: RED_ON;
+        case 5:  OFF;
+                RED_ON;
                 UARTprintf("\r\033[22;24H                                  ");
                 UARTprintf("\r\033[22;24H FREE FALL\n");
                 break;
@@ -1053,33 +1061,30 @@ void tailmotor()
 {
     //result = Filteredyaw; // read conversion result
     //ADC0_ISC_R = 8; // clear completion flag
-    temp_T=(((Filteredyaw)/360)*4999);
-    PWMout_T=(int)temp_T;
+//    temp_T=(((Filteredyaw)/360)*4999);
+//    PWMout_T=(int)temp_T;
 
 
     if (speed == 1)
           {
         PWM1_1_CMPA_R= 1499;   // Duty cycle of 0%
-//        GPIO_PORTE_DATA_R |= (1<<2);
-//        GPIO_PORTE_DATA_R &= ~(1<<3);
+        UARTprintf("\n\r\033[23;2H                                  ");
+        UARTprintf("\r\033[23;2H TURNING LEFT");
           }
     else if (speed ==2)
     {
         PWM1_1_CMPA_R= 3499;   // Duty cycle of 0%
-             //   SYSCTL_RCGCGPIO_R |= 0x10;
-//                     GPIO_PORTE_DIR_R |= (1<<2)|(1<<3);
-//                     GPIO_PORTE_DEN_R |= (1<<2)|(1<<3);
-//                     GPIO_PORTE_DATA_R |= (1<<3);
-//                     GPIO_PORTE_DATA_R &= ~(1<<2);
-//                    delayMs(60);
-//        GPIO_PORTE_DATA_R |= (1<<3);
-//        GPIO_PORTE_DATA_R &= ~(1<<2);
+        UARTprintf("\n\r\033[23;2H                                  ");
+        UARTprintf("\r\033[23;2H TURNING RIGHT");
     }
     else if(speed ==0 ){
-        PWM1_1_CMPA_R  = 2499;
-            delayMs(60);
+        PWM1_1_CMPA_R  = X;
+        UARTprintf("\n\r\033[23;2H                                  ");
+        UARTprintf("\r\033[23;2H NO ROTATION");
+     //   UARTprintf("\r\033[23;2H TURNING RIGHT\n");
+            delayMs(6);
             }
-    UARTprintf("\n\033[23;24HPWM:%d",PWMout_T);
+
 }
 
 
@@ -1093,20 +1098,20 @@ void PortAB_INIT()
 //    GPIO_PORTA_DEN_R |= 0xC0;       // enabling PA4 to PA7
 //    GPIO_PORTB_DEN_R |= 0xFF;       // enabling PB0 to PB8
 //
-        GPIO_PORTA_CR_R = 0xF0;
+        GPIO_PORTA_CR_R |= 0xC0;
         GPIO_PORTB_CR_R = 0xFF;
 
-        GPIO_PORTA_AMSEL_R = 0x00;
-        GPIO_PORTB_AMSEL_R = 0x00;
+//        GPIO_PORTA_AMSEL_R = 0x00;
+//        GPIO_PORTB_AMSEL_R = 0x00;
 
-        GPIO_PORTB_DIR_R = 0xFF;
-        GPIO_PORTA_DIR_R = 0xF0;
+        GPIO_PORTB_DIR_R |= 0xFF;
+        GPIO_PORTA_DIR_R |= 0xC0;
 
-        GPIO_PORTB_AFSEL_R = 0x00;
-        GPIO_PORTA_AFSEL_R = 0x00;
+//        GPIO_PORTB_AFSEL_R = 0x00;
+//        GPIO_PORTA_AFSEL_R = 0x00;
 
-        GPIO_PORTB_DEN_R = 0xFF;
-        GPIO_PORTA_DEN_R = 0xF0;
+//        GPIO_PORTB_DEN_R |= 0x00;
+        GPIO_PORTA_DEN_R |= 0xC0;
 }
 void LCD_init()
 {
@@ -1181,21 +1186,28 @@ void ultrasonic()
        frac=distance%100;
        real=(distance-frac)/100;
        Distance= real+frac/100;
-       if (Distance<30)
+       if (Distance < 30)
        {
-           status=3;
-           //UARTprintf("OBSTACLE DETECTED");
-           GPIO_PORTD_DATA_R |= 0X80;
-          // YELLOW_ON //for indication by led on tiva board
+           // Turn on the red LED (PF1) and turn off the blue LED (PF2)
+           YELLOW_ON;  // Set PF1 high
+           Delay_MicroSecond(5000);
+           OFF;
+           Delay_MicroSecond(5000);
+           // code for on buzzer here
+           GPIO_PORTD_DATA_R |= 0x40;   // Set PF4 high to turn on the buzzer
+           //            Delay_MicroSecond(50000);
+           //            GPIO_PORTD_DATA_R |= ~0x40;
        }
        else
        {
-           GPIO_PORTD_DATA_R &= 0X7F;
-         // GPIO_PORTF_DATA_R &= 0XF1; //for indication by led on tiva board
+           // Turn off the red LED (PF1) and turn on the blue LED (PF2)
+           GREEN_ON;  // Set PF2 high
+           // code for on buzzer off
+           GPIO_PORTD_DATA_R &= ~0x40;   // Set PF4 low to turn off the buzzer
        }
-        sprintf(mesg, "\r\nDistance = %d.%d cm", real,frac); /*convert float type distance data into string */
-        UARTprintf("%s",mesg); /*transmit data to computer */
-        delayMs(200);
+       sprintf(mesg, "\r\nDistance = %d.%d cm", real,frac); /*convert float type distance data into string */
+        UARTprintf("\033[28;2H%s",mesg); /*transmit data to computer */
+        Delay_MicroSecond(1000);
 
 
 }
@@ -1256,8 +1268,10 @@ void Timer0ACapture_init()                  // PD2, PD3 for echo and trig respec
         GPIO_PORTD_AFSEL_R |= 0x04;       /* use PD2 alternate function */
         GPIO_PORTD_PCTL_R &= ~0x00000F00;  /* configure PD0 for T0CCP0. Even block or WTimer2A */
         GPIO_PORTD_PCTL_R |= 0x00000700;    /* PD3 as a digital output signal to provide trigger signal */
-        GPIO_PORTD_DIR_R |=(1<<3)|(1<<7);         /* set PD3 and PD7(BUZZER) as a digital output pin */
-        GPIO_PORTD_DEN_R |=(1<<3)|(1<<7);         /* make PD3 as digital pin */
+        GPIO_PORTD_DIR_R |=(1<<3);         /* set PD3 and PD7(BUZZER) as a digital output pin */
+        GPIO_PORTD_DEN_R |=(1<<3);         /* make PD3 as digital pin */
+        GPIO_PORTD_DIR_R |=(1<<6);         /* set PD3 and PD7(BUZZER) as a digital output pin */
+        GPIO_PORTD_DEN_R |=(1<<6);         /* make PD3 as digital pin */
         WTIMER3_CTL_R  &= ~1;          /* disable Wtimer2A during setup */
         WTIMER3_CFG_R   = 4;           /* 32-bit Wtimer mode */
         WTIMER3_TAMR_R  = 0x17;        /* up-count, edge-time, capture mode */
@@ -1272,59 +1286,51 @@ void HEADmotor()
     //ADC0_ISC_R = 8; // clear completion flag
     //temp_H=(((Mag_z)/15)*499);
     //PWMout_H=(int)temp_H;
-    if(Mag_z>10 && Mag_z<15)
-    {
-        ui8Adjust_motor= 500;
-    }
-    else if(Mag_z<10 )
-       {
-        ui8Adjust_motor= 700;
-       }
-    else if(Mag_z>15 )
-           {
-        ui8Adjust_motor= 200;
-           }
+    X= (int)(FilteredMag_z/30) * 1000;
+
+       ui8Adjust_motor= X;
+
+
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_5, ui8Adjust_motor * ui32Load_motor / 1000);
+    PWMOutputState(PWM0_BASE, PWM_OUT_5_BIT, true);
+    PWMGenEnable(PWM0_BASE, PWM_GEN_2);
    // PWM1_3_CMPA_R= 2000;
     //PWM0_2_CMPB_R = PWMout_H;
     UARTprintf("\n\033[25;24Hheadmotor PWM:%d\n",ui8Adjust_motor );
     UARTprintf("\n\033[26;25Hheadmotor PWM:%d",ui32Load_motor );
 }
-void Servo_var(int time)
-{
-    int i;
-
-      for(i=0; i<50; i++)
-    {
-      /* Given 10us trigger pulse */
-      GPIO_PORTA_DATA_R |= (1<<4); /* make control  pin high */
-      Delay_MicroSecond(time1); /*2.0ms seconds delay */
-      GPIO_PORTA_DATA_R &= ~(1<<4); /* make trigger  pin high */
-      Delay_MicroSecond(20000-time1); /*18.0ms seconds delay */
-        }
-}
+//void Servo_var(int time)
+//{
+//    int i;
+//
+//      for(i=0; i<50; i++)
+//    {
+//      /* Given 10us trigger pulse */
+//      GPIO_PORTA_DATA_R |= (1<<4); /* make control  pin high */
+//      Delay_MicroSecond(time1); /*2.0ms seconds delay */
+//      GPIO_PORTA_DATA_R &= ~(1<<4); /* make trigger  pin high */
+//      Delay_MicroSecond(20000-time1); /*18.0ms seconds delay */
+//        }
+//}
 
 void SERVO_control()
 {
 
-    //  pitch = i32IPart[9];
-
-//      if (fabs(pitch - prevpitch) > 5)
-//      {
-//          ROM_IntMasterDisable();
-//          if (pitch > 5 && pitch > 0)
-//          {
-//              diff = 1050 - ((i32IPart[9]) * (325 / 45));
-//              Servo_var(diff);
-//                state_update = 0xFF;
-//                state = 0x05;
-//                LCD_default_display(LCD_state5);
-    if (pitch>5.0)
+    if (pitch< -5.0)
     {
-    ui8Adjust = 120;
-    }
-    else if (pitch<-5.0)
+    ui8Adjust = (int)(pitch * (0.5))+83;
+    if (ui8Adjust>127)
         {
-        ui8Adjust = 55;
+        ui8Adjust=127;
+        }
+    }
+    else if (pitch> 5.0)
+        {
+        ui8Adjust = (int)(pitch * (0.5))+83;
+        if (ui8Adjust<33)
+                {
+                ui8Adjust=33;
+                }
         }
     else
     {
@@ -1333,31 +1339,6 @@ void SERVO_control()
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, ui8Adjust * ui32Load / 1000);
          PWMOutputState(PWM0_BASE, PWM_OUT_6_BIT, true);
          PWMGenEnable(PWM0_BASE, PWM_GEN_3);
-//          }
-//          else if (pitch < (-5) && pitch < 0)
-//          {
-//              diff = ((fabs(i32IPart[9] - 0)) * (425 / 45)) + 1050;
-//              Servo_var(diff);
-////                state_update = 0xFF;
-////                state = 0x06;
-////                LCD_default_display(LCD_state6);
-//
-//          }
-//          else if (pitch > (45))
-//          {
- //            Servo_var(725);
-//          }
-//          else if (pitch < (-45))
-//          {
-//              Servo_var(2000);
-//          }
-//          ROM_IntMasterEnable();
-      //}
-
-
-
-
-
 }
 
 int
@@ -1387,15 +1368,14 @@ main(void)
 
     ConfigureUART();
     MPU9150_IN_IT();
-    BMP180_IN_IT();
+  //  BMP180_IN_IT();
     Timer0ACapture_init();  /*initialize Timer0A in edge edge time */
     configure_systick();
     SERVO_PWM_init();
-
     ADC_PWM_init();
     Motor_in_it();
     enable_irq();
-    //PortAB_INIT();                  /* Initialize Port A and Port B */
+    PortAB_INIT();                  /* Initialize Port A and Port B */
     strcpy(version,"FLIGHT DESIGN");    /* Initialization of the contents to be displayed on LCD */
    // LCD_init();
    // LCD_PutData(version,32);
@@ -1403,15 +1383,17 @@ main(void)
     while(1)
     {   debug[2]= GPIO_PORTF_DATA_R;
         //UARTprintf("1\n");
-        ultrasonic();
+    ultrasonic();
         MPU9150();
-        BMP180();
-        mode();
-        tailmotor();
-        HEADmotor();
-       // SERVO_control();
+
+    //  BMP180();
+      //  mode();
+       HEADmotor();
+       tailmotor();
+       SERVO_control();
         debug[0]= ui32PWMClock;
-        debug[1]= GPIO_PORTF_DATA_R;
+        debug[1]= GPIO_PORTD_DATA_R;
+        debug[3]= WTIMER3_ICR_R;
     }
 
 }
@@ -1533,32 +1515,7 @@ void ADC_PWM_init()
 
 void SERVO_PWM_init()
 {
-    ////**************** For Servo Motor*******************************////
-//
-//
-//    /* Enable Peripheral Clocks */
-//    SYSCTL_RCGCPWM_R |= 2; /* enable clock to PWM1 */
-//    SYSCTL_RCGCGPIO_R |= 0x20; /* enable clock to PORTF */
-//    //SYSCTL_RCC_R &= ~0x00100000; /* no pre-divide for PWM clock */
-//    //SYSCTL_RCC_R |= 0x000E0000;
-//    /* Enable port PF2 for PWM1 M1PWM7 */
-//    GPIO_PORTF_AFSEL_R = 6; /* PF2 uses alternate function */
-//    GPIO_PORTF_PCTL_R &= ~0x00000F00; /* make PF2 PWM output pin */
-//    GPIO_PORTF_PCTL_R |= 0x00000500;
-//    GPIO_PORTF_DEN_R |= 6; /* pin digital */
-//
-//
-//    PWM1_3_CTL_R &= ~(1<<0); /* stop counter */
-//    PWM1_3_CTL_R &= ~(1<<1);
-//    PWM1_3_GENA_R = 0x0000008C; /* M1PWM7 output set when reload, */
-//    /* clear when match PWMCMPA */
-//    PWM1_3_LOAD_R |= 5000; /* set load value for 1kHz (16MHz/16000) */
-//    PWM1_3_CMPA_R |= 4999; /* set duty cycle to min */
-//    PWM1_3_CTL_R |= 1; /* start timer */
-//    PWM1_ENABLE_R |= 0x40; /* start PWM1 ch7 */
-//    //
-//    ////////////////////////////////////////////////////////////////////
-       ////////////////////////////////////////////////////////////////////
+
        SysCtlPWMClockSet(SYSCTL_PWMDIV_64); // CLOCK_CPU/64
 
         SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0); // PWM Module 0
@@ -1609,20 +1566,18 @@ for(j = 0; j < 1000; j++) {}    /* do nothing for 1 ms */
 void Delay_MicroSecond(int time)
 {
     int i;
-    SYSCTL_RCGCTIMER_R  |= 0x00000002;     /* enable clock to Timer Block 1 */
-    TIMER1_CTL_R = 0;            /* disable Timer before initialization */
-    TIMER1_CFG_R = 0x04;         /* 16-bit option */
-    TIMER1_TAMR_R = 0x02;        /* periodic mode and down-counter */
-    TIMER1_TAILR_R = 40 - 1;  /* TimerA interval load value reg */
-    TIMER1_ICR_R = 0x1;          /* clear the TimerA timeout flag */
-    TIMER1_CTL_R |= 0x01;        /* enable Timer A after initialization */
+    SYSCTL_RCGCTIMER_R |= 4;     /* enable clock to Timer Block 2 */
+    TIMER2_CTL_R = 0;            /* disable Timer before initialization */
+    TIMER2_CFG_R = 0x04;         /* 16-bit option */
+    TIMER2_TAMR_R = 0x02;        /* periodic mode and down-counter */
+    TIMER2_TAILR_R = 40 - 1;    /* TimerA interval load value reg for 1us */
+    TIMER2_ICR_R = 0x1;          /* clear the TimerA timeout flag */
+    TIMER2_CTL_R |= 0x01;        /* enable Timer A after initialization */
+
     for(i = 0; i < time; i++)
     {
-        while ((TIMER1_RIS_R & 0x1) == 0); /*wait for TimerA timeout flag */
-
-    //    GPIO_PORTF_DATA_R |= 0x0E;
-
-        TIMER1_ICR_R = 0x1;   /* clear the TimerA timeout flag */
+        while ((TIMER2_RIS_R  & 0x1) == 0) ;      /* wait for Timer2A timeout flag. Interrupt is generated for every 1us */
+        TIMER2_ICR_R = 0x1;      /* clear the TimerA timeout flag */
     }
 }
 
