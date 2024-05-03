@@ -1,3 +1,4 @@
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -113,7 +114,6 @@ int main()
 {
     DisableInterrupts();                                 // Disable the interrupts
     heap_start = (unsigned int)&__heap_start__;          // storing the start  address of heap memory section
-    heap_end   = (unsigned int)&__heap_end__;            // storing the ending address of heap memory section
     mem = HeapMemInit((void*)heap_start, 128 , 16);      // Heap memory initialization (128 bytes of memory in chunks of 16 bytes)
     Init_PortAB();                                       // Initialize ports A and B
     Init_PortC();                                        // Initialize Port C
@@ -222,7 +222,8 @@ void task4(void)
        sin_index = (sin_index+1)%127;        // Increment the index to send the next value
        data      =  sine[sin_index];         // Pick a value to be sent from the look up table
        unsigned int command   =  0x9000;     // To send value on Channel A
-       debug_var[4] = data;                  // This will be used for viewing purposes
+
+       debug_var_task4  = data;                  // For viewing purposes
 
        int temp =  GPIO_PORTF_DATA_R ;
        unsigned temp_data = ((data<<2)|(command));
@@ -247,24 +248,58 @@ void task5(void)
    while(1)
    {
        GPIO_PORTF_DATA_R = 0x0A;             // Yellove LED
+       GPIO_PORTE_DATA_R = 0x00;             // To make sure PortC values change for interrupt handling
+       debug_var_task5 = *ptr_task5;         // For viewing and de-bugging purposes
        if(mem == 1)  // Heap Memory Initialization was successful
        {
           if(flag == 0)
           {
               ptr = MemAlloc(16);      // Request 16 bytes of memory from Heap Section
-              debug_ptr1 = ptr;        // For display purposes
+              strcpy(task5_alloc, "Memory allocated to task5 at location: ");
+              itoa((int)ptr,task5_location,10); // third argument of 10 denotes decimal base
+              strcat(task5_alloc, task5_location);
+              int index5 = 0;
+
+              UARTCharPut(UART0_BASE, '\n');
+              UARTCharPut(UART0_BASE, '\r');
+              while(task5_alloc[index5] != '\0')
+                {
+                   UARTCharPut(UART0_BASE, task5_alloc[index5]);
+                   index5 = index5+1;
+                }
+
+              UARTCharPut(UART0_BASE, '\n');
+              UARTCharPut(UART0_BASE, '\r');
+              task5_alloc[0] = '\0'; // Empty the array for printing next time
+
               ptr_task5 = (int *)ptr;  // Store the starting address of allocated memory in ptr_task5 pointer
               *ptr_task5 = 0;          // Initialize 0 in the location pointed to by ptr_task5
+
               flag = 1;
           }
           else
           {
-              debug_var[5] = *ptr_task5;
               *ptr_task5 = *ptr_task5 + 1;
               for(int i=1;i<=500;i++) delay_1ms();  // wait for 0.5s
               if(*ptr_task5 == 11)
               {
                   MemFree(ptr);  // To Free up the memory
+                  strcpy(task5_dealloc , "Memory de-allocated to task5 at location: ");
+                  strcat(task5_dealloc, task5_location);
+                  int index5 = 0;
+
+                  UARTCharPut(UART0_BASE, '\n');
+                  UARTCharPut(UART0_BASE, '\r');
+                  while(task5_dealloc[index5] != '\0')
+                    {
+                       UARTCharPut(UART0_BASE, task5_dealloc[index5]);
+                       index5 = index5+1;
+                    }
+
+                  UARTCharPut(UART0_BASE, '\n');
+                  UARTCharPut(UART0_BASE, '\r');
+                  task5_dealloc[0] = '\0'; // Empty the array for printing next time
+
                   flag = 0;      // Start the process all over again
               }
           }
@@ -284,28 +319,59 @@ void task6(void)
     {
         GPIO_PORTE_DATA_R = 0x00;             // To make sure PortC values change for interrupt handling
         GPIO_PORTF_DATA_R = 0x0C;             // Cyan LED
+        debug_var_task6 = *ptr_task6;         // For viewing and de-bugging purposes
         if(mem == 1)  // Heap Memory Initialization was successful
         {
            if(flag2 == 0)
            {
-               ptr2 = MemAlloc(16);       // Request 16 bytes of memory from Heap Section
-               ptr_task6  = (int *)ptr2;  // Store the starting address of allocated memory in ptr_task5 pointer
-               debug_ptr2 = ptr2;         // Display this value for debugging purposes
-               *ptr_task6 = 0;            // Initialize 0 in the location pointed to by ptr_task5
+//               DisableInterrupts();          // Disable interrupts before getting memory from heap
+               ptr2 = MemAlloc(16);            // Request 16 bytes of memory from Heap Section
+//               EnableInterrupts();           // Enable the interrupts once memory allocation is done
+               ptr_task6  = (int *)ptr2;       // Store the starting address of allocated memory in ptr_task5 pointer
+               *ptr_task6 = 0;                 // Initialize 0 in the location pointed to by ptr_task5
                flag2 = 1;
+
+               strcpy(task6_alloc,"Memory allocated to task6 at location: ");
+               itoa((int)ptr2,task6_location,10); // third argument of 10 denotes decimal base
+               strcat(task6_alloc, task6_location);
+               int index6 = 0;
+               UARTCharPut(UART0_BASE, '\n');
+               UARTCharPut(UART0_BASE, '\r');
+               while(task6_alloc[index6] != '\0')
+                 {
+                    UARTCharPut(UART0_BASE, task6_alloc[index6]);
+                    index6 = index6+1;
+                 }
+
+               UARTCharPut(UART0_BASE, '\n');
+               UARTCharPut(UART0_BASE, '\r');
+               task6_alloc[0] = '\0'; // Empty the array for printing next time
+
            }
            else
            {
-               debug_var[6] = *ptr_task6;    // Display this value for debugging purposes
-               *ptr_task6 = *ptr_task6 + 1;  // Increment the value in the location pointed to by the pointer ptr_task6
+               *ptr_task6 = *ptr_task6 + 1;          // Increment the value in the location pointed to by the pointer ptr_task6
                for(int i=1;i<=500;i++) delay_1ms();  // wait for 0.5s
                if(*ptr_task6 == 11)
                {
-                   DisableInterrupts();  // Disable the interrupt when you are trying to free up the used memory
-                   MemFree(ptr2);     // To Free up the memory
-                   debug_ptr2 = ptr2;  // Display this value for debugging purposes
+//                   DisableInterrupts();  // Disable the interrupt when you are trying to free up the used memory
+                   MemFree(ptr2);        // To Free up the memory
+//                   EnableInterrupts();   // Once memory deallocation is done, enable the interrupts again
                    flag2 = 0;          // Start the process all over again
-                   EnableInterrupts();   // Once memory deallocation is done, enable the interrupts again
+                   strcpy(task6_dealloc,"Memory deallocated to task6 at location: ");
+                   strcat(task6_dealloc, task6_location);
+                   int index6 = 0;
+                   UARTCharPut(UART0_BASE, '\n');
+                   UARTCharPut(UART0_BASE, '\r');
+                   while(task6_dealloc[index6] != '\0')
+                     {
+                        UARTCharPut(UART0_BASE, task6_dealloc[index6]);
+                        index6 = index6+1;
+                     }
+
+                   UARTCharPut(UART0_BASE, '\n');
+                   UARTCharPut(UART0_BASE, '\r');
+                   task6_dealloc[0] = '\0'; // Empty the array for printing next time
                }
            }
 
@@ -371,22 +437,17 @@ void SysTick_Handler(void)
 // Function to handle key press as interrupts
 void GPIO_PORTC_Handler(void)
 {
-    debug_var[0]+= 1;
     if((GPIO_PORTC_DATA_R & 0xF0) != 0xF0)  // Key Press Detected
     {
-        debug_var[1] += 1;
         GPIO_PORTE_DATA_R = 0x07; // Driving PE3 low   (Last row driven low)
-        debug_var[2] = GPIO_PORTE_DATA_R;
-
-        debug_var[3] = GPIO_PORTC_DATA_R & 0xF0;     // Getting the data in PC7-PC4
-        if((GPIO_PORTC_DATA_R & 0xF0) == 0xE0)
+        if((GPIO_PORTC_DATA_R & 0xF0) == 0xE0)              // left most key in the last row
         {
             // Dynamically change the priorities of the tasks here
             for(int wait = 0; wait<80; wait++) delay_1ms();
             for(int i=0;i<THREAD_NUM;i++)      tcbs[i].priority = (tcbs[i].priority + 1) % THREAD_NUM;
         }
 
-        else if((GPIO_PORTC_DATA_R & 0xF0) == 0xD0)
+        else if((GPIO_PORTC_DATA_R & 0xF0) == 0xD0)         // Second key from the left in the last row
         {
             char* p = "Inhale.... Exhale.....and Repeat\n";
             int m = 0; // for indexing purposes
@@ -400,7 +461,7 @@ void GPIO_PORTC_Handler(void)
             UARTCharPut(UART0_BASE, '\r');
         }
 
-        else if((GPIO_PORTC_DATA_R & 0xF0) == 0xB0)
+        else if((GPIO_PORTC_DATA_R & 0xF0) == 0xB0)        // Third key from the left in the last row
         {
             char* q = "This mini project is a Pre-Emptive Task Scheduler done as part of Embedded Systems Course\n";
             int j = 0; // for indexing purposes
@@ -414,7 +475,7 @@ void GPIO_PORTC_Handler(void)
             UARTCharPut(UART0_BASE, '\r');
         }
 
-        else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70)
+        else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70)        // Right most key in the last row
         {
             char* r = "Process is more important than the results\n";
             int k = 0; // for indexing purposes
@@ -428,7 +489,6 @@ void GPIO_PORTC_Handler(void)
             UARTCharPut(UART0_BASE, '\r');
         }
     }
-
     GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
 }
 
