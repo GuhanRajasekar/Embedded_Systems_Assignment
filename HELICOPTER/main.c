@@ -46,6 +46,8 @@
 #include <math.h>
 #include <string.h>
 #include "driverlib/pwm.h"
+#include "sensorlib/hw_bmp180.h"
+#include "sensorlib/bmp180.h"
 
 //*****************************************************************************
 //
@@ -76,6 +78,12 @@
 //*****************************************************************************
 #define MPU9150_I2C_ADDRESS     0x68
 
+//*****************************************************************************
+//
+// Define BMP180 I2C Address.
+//
+//*****************************************************************************
+#define BMP180_I2C_ADDRESS      0x77
 
 
 
@@ -106,9 +114,13 @@
  void LCD_RecData();                  // Function to send necessary control signals to LCD to receive Data
  void LCD_init();                     // Function to initialize the LCD
  void LCD_PutData(char* data,int size_int);
+ void BMP180();
+ void BMP180_IN_IT();
+
 
 #define ALPHA 0.1f
 #define GREEN_ON GPIO_PORTF_DATA_R=0x08
+#define RED_ON (GPIO_PORTF_DATA_R = 0x02)
 #define YELLOW_ON GPIO_PORTF_DATA_R=0x0A  // turn on red and green
 #define OFF GPIO_PORTF_DATA_R=0x00        // turn of all leds
 #define  PWM_FREQUENCY_MOTOR 1000
@@ -131,10 +143,14 @@ uint32_t time; /*stores pulse on time */
 uint32_t distance; /* stores measured distance value */
 char mesg[240];  /* string format of distance value */
 int frac,i,servo_delay;
-int real,status,speed,PWMout_H,PWMout_T;
+int real,status,speed,PWMout_H,PWMout_T,pulse;
 char version[30];
-float pitch, yaw,Filteredpitch =0.0, prevyaw=0.0,Filteredyaw=0.0, prevMag_z=0.0, Distance;
-float X,Y,Z, temp_T,temp_H,Mag_z,time1;
+float pitch, yaw,Filteredpitch =0.0, prevpitch=0.0, prevyaw=0.0,Filteredyaw=0.0, prevMag_z=0.0, Distance;
+float X,Y,Z, temp_T,temp_H,Mag_z,time1,diff;
+float fTemperature, fPressure, fAltitude;
+   int32_t i32PIntegerPart;
+   int32_t i32PFractionPart;
+   float Alt,Filterd_Alt=0.0,prev_Alt=0.0;
 float prevFilteredAccelX = 0.0, prevFilteredAccelY = 0.0, prevFilteredAccelZ = 0.0;
     float prevFilteredGyroX = 0.0, prevFilteredGyroY = 0.0, prevFilteredGyroZ = 0.0;
     float prevFilteredMagX = 0.0, prevFilteredMagY = 0.0, prevFilteredMagZ = 0.0;
@@ -151,6 +167,12 @@ tI2CMInstance g_sI2CInst;
 //
 //*****************************************************************************
 tMPU9150 g_sMPU9150Inst;
+//*****************************************************************************
+//
+// Global instance structure for the BMP180 sensor driver.
+//
+//*****************************************************************************
+tBMP180 g_sBMP180Inst;
 
 //*****************************************************************************
 //
@@ -395,6 +417,85 @@ ConfigureUART(void)
     UARTStdioConfig(0, 115200, 16000000);
 }
 
+
+//*****************************************************************************
+//
+// BMP180 Sensor callback function.  Called at the end of BMP180 sensor driver
+// transactions. This is called from I2C interrupt context. Therefore, we just
+// set a flag and let main do the bulk of the computations and display.
+//
+//*****************************************************************************
+void BMP180AppCallback(void* pvCallbackData, uint_fast8_t ui8Status)
+{
+    if(ui8Status == I2CM_STATUS_SUCCESS)
+    {
+        g_vui8DataFlag = 1;
+    }
+}
+
+//*****************************************************************************
+//
+// Called by the NVIC as a result of I2C3 Interrupt. I2C3 is the I2C connection
+// to the BMP180.
+//
+//*****************************************************************************
+void
+BMP180I2CIntHandler(void)
+{
+    //
+    // Pass through to the I2CM interrupt handler provided by sensor library.
+    // This is required to be at application level so that I2CMIntHandler can
+    // receive the instance structure pointer as an argument.
+    //
+    I2CMIntHandler(&g_sI2CInst);
+}
+
+//*****************************************************************************
+//
+// Called by the NVIC as a SysTick interrupt, which is used to generate the
+// sample interval
+//
+//*****************************************************************************
+void
+SysTickIntHandler()
+{
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, GPIO_PIN_1);
+    BMP180DataRead(&g_sBMP180Inst, BMP180AppCallback, &g_sBMP180Inst);
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_1, 0x00);
+}
+
+void BMP180_IN_IT()
+{
+//
+        // Initialize the BMP180.
+        //
+        BMP180Init(&g_sBMP180Inst, &g_sI2CInst, BMP180_I2C_ADDRESS,
+                   BMP180AppCallback, &g_sBMP180Inst);
+        //
+            // Wait for initialization callback to indicate reset request is complete.
+            //
+            while(g_vui8DataFlag == 0)
+            {
+                //
+                // Wait for I2C Transactions to complete.
+                //
+            }
+
+            //
+            // Reset the data ready flag
+            //
+            g_vui8DataFlag = 0;
+
+            //
+            // Enable the system ticks at 10 Hz.
+            //
+            ROM_SysTickPeriodSet(ROM_SysCtlClockGet() / (10 * 3));
+            ROM_SysTickIntEnable();
+            ROM_SysTickEnable();
+
+
+}
+
 void MPU9150_IN_IT(){
     //
     // Setup the system clock to run at 40 Mhz from PLL with crystal reference
@@ -481,6 +582,7 @@ void MPU9150_IN_IT(){
     //
     MPU9150AppI2CWait(__FILE__, __LINE__);
 
+
     //
     // Write application specifice sensor configuration such as filter settings
     // and sensor range settings.
@@ -542,6 +644,125 @@ void MPU9150_IN_IT(){
 
 }
 
+void BMP180()
+{
+
+    //
+    // Read the data from the BMP180 over I2C.  This command starts a
+    // temperature measurement.  Then polls until temperature is ready.
+    // Then automatically starts a pressure measurement and polls for that
+    // to complete. When both measurement are complete and in the local
+    // buffer then the application callback is called from the I2C
+    // interrupt context.  Polling is done on I2C interrupts allowing
+    // processor to continue doing other tasks as needed.
+    //
+    BMP180DataRead(&g_sBMP180Inst, BMP180AppCallback, &g_sBMP180Inst);
+    while(g_vui8DataFlag == 0)
+    {
+        //
+        // Wait for the new data set to be available.
+        //
+    }
+
+    //
+    // Reset the data ready flag.
+    //
+    g_vui8DataFlag = 0;
+
+    //
+    // Get a local copy of the latest temperature data in float format.
+    //
+    BMP180DataTemperatureGetFloat(&g_sBMP180Inst, &fTemperature);
+
+    //
+    // Convert the floats to an integer part and fraction part for easy
+    // print.
+    //
+    i32PIntegerPart = (int32_t) fTemperature;
+    i32PFractionPart =(int32_t) (fTemperature * 1000.0f);
+    i32PFractionPart = i32PFractionPart - (i32PIntegerPart * 1000);
+    if(i32PFractionPart < 0)
+    {
+        i32PFractionPart *= -1;
+    }
+
+    //
+    // Print temperature with three digits of decimal precision.
+    //
+    UARTprintf("\033[28;2HTemperature %3d.%03d\t\t", i32PIntegerPart, i32PFractionPart);
+
+    //
+    // Get a local copy of the latest air pressure data in float format.
+    //
+    BMP180DataPressureGetFloat(&g_sBMP180Inst, &fPressure);
+
+    //
+    // Convert the floats to an integer part and fraction part for easy
+    // print.
+    //
+    i32PIntegerPart = (int32_t) fPressure;
+    i32PFractionPart =(int32_t) (fPressure * 1000.0f);
+    i32PFractionPart = i32PFractionPart - (i32PIntegerPart * 1000);
+    if(i32PFractionPart < 0)
+    {
+        i32PFractionPart *= -1;
+    }
+
+    //
+    // Print Pressure with three digits of decimal precision.
+    //
+    UARTprintf("Pressure %3d.%03d\t\t", i32PIntegerPart, i32PFractionPart);
+
+    //
+    // Calculate the altitude.
+    //
+    fAltitude = 44330.0f * (1.0f - powf(fPressure / 101325.0f,
+                                        1.0f / 5.255f));
+
+    //
+    // Convert the floats to an integer part and fraction part for easy
+    // print.
+    //
+    i32PIntegerPart = (int32_t) fAltitude;
+    i32PFractionPart =(int32_t) (fAltitude * 1000.0f);
+    i32PFractionPart = i32PFractionPart - (i32PIntegerPart * 1000);
+    if(i32PFractionPart < 0)
+    {
+        i32PFractionPart *= -1;
+    }
+
+    //
+    // Print altitude with three digits of decimal precision.
+    //
+    UARTprintf("Altitude %3d.%03d", i32PIntegerPart, i32PFractionPart);
+    Alt = i32PIntegerPart+abs(i32PFractionPart/1000);
+
+//    X_F =Filterd_Alt*1000 -Filterd_Alt;
+//    X_I=Filterd_Alt;
+//    X_F = X_F%1000;
+    //
+    // Print new line.
+    //
+
+      if (Alt-prev_Alt>40.0)
+      {
+          status = 5;
+          prev_Alt= Alt;
+         // mode();
+
+      }
+      else
+      {
+          prev_Alt= Alt;
+      }
+//    UARTprintf("\n ALTITUDE:%3d.%03d",X_I,X_F);
+
+    //
+    // Delay to keep printing speed reasonable. About 100 milliseconds.
+    //
+    ROM_SysCtlDelay(ROM_SysCtlClockGet() / (10 * 3));
+
+}
 
 void MPU9150()
 {
@@ -722,16 +943,16 @@ void MPU9150()
               UARTprintf("\033[19;32H%3d.%03d", i32IPart[13], i32FPart[13]);
               UARTprintf("\033[19;50H%3d.%03d", i32IPart[14], i32FPart[14]);
               UARTprintf("\033[19;68H%3d.%03d", i32IPart[15], i32FPart[15]);
-              pitch = i32IPart[9]+ i32FPart[9]/1000;
+              pitch = i32IPart[9];
               yaw = i32IPart[11]+i32IPart[11]/1000;
-              Filteredpitch = lowPassFilter(pitch, Filteredpitch);
-              Filteredyaw = lowPassFilter(yaw, Filteredyaw);
-              Y_I= Filteredyaw;
-              Y_F = Filteredyaw*1000-Filteredyaw;
-              Y_F = Y_F%1000;
-              X_I= Filteredpitch;
-              X_F = abs(Filteredpitch*1000-Filteredpitch);
-              X_F = X_F%1000;
+           //   Filteredpitch = lowPassFilter(pitch, Filteredpitch);
+           //   Filteredyaw = lowPassFilter(yaw, Filteredyaw);
+//              Y_I= Filteredyaw;
+//              Y_F = Filteredyaw*1000-Filteredyaw;
+//              Y_F = Y_F%1000;
+//              X_I= Filteredpitch;
+//              X_F = abs(Filteredpitch*1000-Filteredpitch);
+//              X_F = X_F%1000;
 //              Z = pfGyro[2];
 //              X = (atan2(pfAccel[0], sqrt (pfAccel[1] * pfAccel[1] + pfAccel[2] * pfAccel[2]))*180.0)/3.14;
 //              Y = (atan2(pfAccel[1], sqrt (pfAccel[0] * pfAccel[0] + pfAccel[2] * pfAccel[2]))*180.0)/3.14;
@@ -760,14 +981,19 @@ void MPU9150()
                   prevMag_z= Mag_z;
                //   mode();
               }
-              if (abs(Filteredyaw-prevyaw)<=2)
+              if (abs(yaw-prevyaw)<=2 )
               {
-                  prevyaw =Filteredyaw;
+                  prevyaw =yaw;
                   speed=0;
               }
-              else if (abs(Filteredyaw-prevyaw)>2)
+              else if ((yaw-prevyaw)>2)
+                    {
+                        prevyaw =yaw;
+                        speed=2;
+                    }
+              else if ((yaw-prevyaw)<-2)
               {
-                  prevyaw =Filteredyaw;
+                  prevyaw =yaw;
                   speed=1;
               }
               UARTprintf("\n\033[24;2Hspeed:%d",speed);
@@ -797,12 +1023,19 @@ void mode(){
 
                 break;
         case 3:
+                YELLOW_ON;
                 UARTprintf("\r\033[22;24H                                  ");
                 UARTprintf("\r\033[22;24H OBSTACLE DETECTED\n");
 
                 break;
         case 4:
                 UARTprintf("\r                                   ");
+                break;
+
+        case 5: RED_ON;
+                UARTprintf("\r\033[22;24H                                  ");
+                UARTprintf("\r\033[22;24H FREE FALL\n");
+                break;
     }
 
 }
@@ -826,9 +1059,22 @@ void tailmotor()
 
     if (speed == 1)
           {
-        PWM1_1_CMPA_R= PWMout_T;   // Duty cycle of 0%
-            delayMs(60);
+        PWM1_1_CMPA_R= 1499;   // Duty cycle of 0%
+//        GPIO_PORTE_DATA_R |= (1<<2);
+//        GPIO_PORTE_DATA_R &= ~(1<<3);
           }
+    else if (speed ==2)
+    {
+        PWM1_1_CMPA_R= 3499;   // Duty cycle of 0%
+             //   SYSCTL_RCGCGPIO_R |= 0x10;
+//                     GPIO_PORTE_DIR_R |= (1<<2)|(1<<3);
+//                     GPIO_PORTE_DEN_R |= (1<<2)|(1<<3);
+//                     GPIO_PORTE_DATA_R |= (1<<3);
+//                     GPIO_PORTE_DATA_R &= ~(1<<2);
+//                    delayMs(60);
+//        GPIO_PORTE_DATA_R |= (1<<3);
+//        GPIO_PORTE_DATA_R &= ~(1<<2);
+    }
     else if(speed ==0 ){
         PWM1_1_CMPA_R  = 2499;
             delayMs(60);
@@ -839,13 +1085,28 @@ void tailmotor()
 
 void PortAB_INIT()
 {
-    SYSCTL_RCGC2_R |= 0x00000003;       // enable clock to GPIOA, GPIOB at clock gating control register
-    // Enable the GPIO pins
-    GPIO_PORTA_DIR_R |= 0xC0;       // PA4 to PA7 set to output
-    GPIO_PORTB_DIR_R |= 0xFF;       // PB0 to PB7 set to output
-    // enable the GPIO pins for digital function
-    GPIO_PORTA_DEN_R |= 0xC0;       // enabling PA4 to PA7
-    GPIO_PORTB_DEN_R |= 0xFF;       // enabling PB0 to PB8
+  //  SYSCTL_RCGC2_R |= 0x00000003;       // enable clock to GPIOA, GPIOB at clock gating control register
+//    // Enable the GPIO pins
+//     GPIO_PORTA_DIR_R |= 0xC0;       // Set PA6 and PA7 as output
+////     GPIO_PORTB_DIR_R = 0xFF;       // PB0 to PB7 set to output
+////    // enable the GPIO pins for digital function
+//    GPIO_PORTA_DEN_R |= 0xC0;       // enabling PA4 to PA7
+//    GPIO_PORTB_DEN_R |= 0xFF;       // enabling PB0 to PB8
+//
+        GPIO_PORTA_CR_R = 0xF0;
+        GPIO_PORTB_CR_R = 0xFF;
+
+        GPIO_PORTA_AMSEL_R = 0x00;
+        GPIO_PORTB_AMSEL_R = 0x00;
+
+        GPIO_PORTB_DIR_R = 0xFF;
+        GPIO_PORTA_DIR_R = 0xF0;
+
+        GPIO_PORTB_AFSEL_R = 0x00;
+        GPIO_PORTA_AFSEL_R = 0x00;
+
+        GPIO_PORTB_DEN_R = 0xFF;
+        GPIO_PORTA_DEN_R = 0xF0;
 }
 void LCD_init()
 {
@@ -853,7 +1114,7 @@ void LCD_init()
        Each time we load portB with necessary command, we need to send appropriate control
        signals to PORTA so that it can latch on to the data.
     */
-    GPIO_PORTB_DATA_R = 0x38; LCD_RecCommand();   // 2 Lines and 5×7 character (8-bit data, D0 to D7)
+    GPIO_PORTB_DATA_R = 0x38; LCD_RecCommand();   // 2 Lines and 5Ã—7 character (8-bit data, D0 to D7)
     GPIO_PORTB_DATA_R = 0x01; LCD_RecCommand();   // clear Display Screen
     GPIO_PORTB_DATA_R = 0x0F; LCD_RecCommand();   // Display ON, Cursor Blinking
     GPIO_PORTB_DATA_R = 0x80; LCD_RecCommand();   // Force Cursor to beginning of 1st Line
@@ -908,73 +1169,95 @@ void LCD_PutData(char* data,int size_int)
 // ultrasonic sensor
 void ultrasonic()
 
-{   UARTprintf("2\n");
-    if ((GPIO_PORTF_DATA_R & 0x10)==0 ) {
-    time = Measure_distance(); /* take pulse duration measurement */
-   // distance=time;
-    UARTprintf("3\n");
-   distance = ((time *10625)/100000); /* convert pulse duration into distance */
-   frac=distance%100;
-   real=(distance-frac)/100;
-    sprintf(mesg, "\r\n distance:%d.%d cm", real,frac); /*convert float type distance data into string */
-    UARTprintf("\033[20;30H %s\n ",mesg); /*transmit data to computer */
-
-   Distance = real+frac/100;
-   if(Distance<=40.0)
-   {
-       status = 3;
-      // mode();
-   }
-   else
-   {
-       status = 4;
-   }
-
-}
-
-}
-uint32_t Measure_distance(void)
 {
-      unsigned int lastEdge, thisEdge;
-      /* Given 10us trigger pulse. PD3 is trigger pin (output) */
-      GPIO_PORTD_DATA_R &= ~(1<<3); /* make trigger  pin low */
-      Delay_MicroSecond(10); /*10 seconds delay */
-      GPIO_PORTD_DATA_R |= (1<<3); /* make trigger  pin high */
-      Delay_MicroSecond(10); /*10 seconds delay */
-      GPIO_PORTD_DATA_R &= ~(1<<3); /* make trigger  pin low */
+
+   // Timer0ACapture_init();  /*initialize Timer0A in edge edge time */
+   // ConfigureUART(); /* initialize UART0 module to transmit data to computer */
+
+
+        time = Measure_distance(); /* take pulse duration measurement */
+       // distance=time;
+       distance = ((time *10625)/100000); /* convert pulse duration into distance */
+       frac=distance%100;
+       real=(distance-frac)/100;
+       Distance= real+frac/100;
+       if (Distance<30)
+       {
+           status=3;
+           //UARTprintf("OBSTACLE DETECTED");
+           GPIO_PORTD_DATA_R |= 0X80;
+           //GPIO_PORTF_DATA_R |= 0X0B; //for indication by led on tiva board
+       }
+       else
+       {
+           GPIO_PORTD_DATA_R &= 0X7F;
+         // GPIO_PORTF_DATA_R &= 0XF1; //for indication by led on tiva board
+       }
+        sprintf(mesg, "\r\nDistance = %d.%d cm", real,frac); /*convert float type distance data into string */
+        UARTprintf("%s",mesg); /*transmit data to computer */
+        delayMs(200);
+
+
+}
+
+void send_trigger_pulse(void)
+{
+    GPIO_PORTD_DATA_R &= ~0x08; /* make trigger  pin low */
+    Delay_MicroSecond(10); /*10 seconds delay */
+    GPIO_PORTD_DATA_R |= 0x08; /* make trigger  pin high */
+    Delay_MicroSecond(10); /*10 seconds delay */
+    GPIO_PORTD_DATA_R &= ~0x08; /* make trigger  pin low */
+}
+
+/* This function captures consecutive rising and falling edges of a periodic signal */
+
+/* from Timer Block 0 Timer A and returns the time difference (the period of the signal). */
+
+uint32_t Measure_distance(void)
+
+{
+
+     int lastEdge, thisEdge;
+     send_trigger_pulse();
     while(1)
     {
-        WTIMER3_ICR_R = 4;                      /* clear Wtimer2A capture flag */
+        WTIMER3_ICR_R = 4;           /* clear Wtimer2A capture flag */
         while(((WTIMER3_RIS_R & 4) == 0)) ;       /* wait till captured */
-        if((GPIO_PORTD_DATA_R&(1<<2)))          /*check if rising edge occurs on PD0 echo pin*/
+       if((GPIO_PORTD_DATA_R&(1<<2)))          /*check if rising edge occurs on PD2 echo pin*/
         {
-            lastEdge = WTIMER3_TAR_R;           /* save the timestamp */
-            WTIMER3_ICR_R = 4;                  /* detect falling edge. Hence clear Wtimer2A capture flag */
-            while(((WTIMER3_RIS_R&4) == 0));     /* wait till falling edge is captured */
-            thisEdge = WTIMER3_TAR_R;            /* save the timestamp */
-            distance = ((thisEdge - lastEdge)* 10625)/10000000;
-//            return (thisEdge - lastEdge);
-//            if(distance < 30 )
-//                return (distance);       /* return the distance */
-//            else
-                return (distance);
+        lastEdge = WTIMER3_TAR_R;     /* save the time stamp */
+
+        /* detect falling edge */
+        WTIMER3_ICR_R = 4;            /* clear timer0A capture flag */
+
+        while((WTIMER3_RIS_R & 4) == 0);    /* wait till captured */
+              /* save the timestamp */
+        if((GPIO_PORTD_DATA_R&(1<<2))==0){
+              thisEdge =  WTIMER3_TAR_R;
+              return (thisEdge-lastEdge)& 0x00FFFFFF; /* return the time difference */
+    }
         }
     }
+
 }
 
 
 void Timer0ACapture_init()                  // PD2, PD3 for echo and trig respectively
 {
-        SYSCTL_RCGCWTIMER_R  |= (1<<3);     /* enable clock to wide Timer Block 2 */
+    SYSCTL_RCGCWTIMER_R  |= (1<<3);     /* enable clock to wide Timer Block 2 */
         SYSCTL_RCGCGPIO_R    |= (1<<3);      /* enable clock to PORTD */
+        SYSCTL_RCGC2_R |= 0x00000008;       /* enable clock to PORTF */
         GPIO_PORTD_DIR_R &= ~0x04;        /* make PD2 an input pin */
+//        GPIO_PORTF_DIR_R |= 0x1F;
+//        GPIO_PORTF_DEN_R|= 0x1F;
+//        GPIO_PORTF_PUR_R |= 0x10;
+
         GPIO_PORTD_DEN_R |= 0x04;         /* make PD2 as digital pin */
         GPIO_PORTD_AFSEL_R |= 0x04;       /* use PD2 alternate function */
         GPIO_PORTD_PCTL_R &= ~0x00000F00;  /* configure PD0 for T0CCP0. Even block or WTimer2A */
-        GPIO_PORTD_PCTL_R |= 0x00000700;
-        /* PD3 as a digital output signal to provide trigger signal */
-        GPIO_PORTD_DIR_R |=(1<<3)|(1<<6);         /* set PD3 as a digital output pin */
-        GPIO_PORTD_DEN_R |=(1<<3)|(1<<6);         /* make PD3 as digital pin */
+        GPIO_PORTD_PCTL_R |= 0x00000700;    /* PD3 as a digital output signal to provide trigger signal */
+        GPIO_PORTD_DIR_R |=(1<<3)|(1<<7);         /* set PD3 and PD7(BUZZER) as a digital output pin */
+        GPIO_PORTD_DEN_R |=(1<<3)|(1<<7);         /* make PD3 as digital pin */
         WTIMER3_CTL_R  &= ~1;          /* disable Wtimer2A during setup */
         WTIMER3_CFG_R   = 4;           /* 32-bit Wtimer mode */
         WTIMER3_TAMR_R  = 0x17;        /* up-count, edge-time, capture mode */
@@ -1001,50 +1284,61 @@ void HEADmotor()
            {
         ui8Adjust_motor= 200;
            }
+   // PWM1_3_CMPA_R= 2000;
     //PWM0_2_CMPB_R = PWMout_H;
     UARTprintf("\n\033[25;24Hheadmotor PWM:%d\n",ui8Adjust_motor );
     UARTprintf("\n\033[26;25Hheadmotor PWM:%d",ui32Load_motor );
 }
+void Servo_var(int time)
+{
+     i=0;
+      for(i=0; i<50; i++)
+    {
+      /* Given 10us trigger pulse */
+      GPIO_PORTA_DATA_R |= (1<<4); /* make control  pin high */
+      Delay_MicroSecond(time1); /*2.0ms seconds delay */
+      GPIO_PORTA_DATA_R &= ~(1<<4); /* make trigger  pin high */
+      Delay_MicroSecond(20000-time1); /*18.0ms seconds delay */
+        }
+}
 
 void SERVO_control()
 {
-    if (Filteredpitch>0.0)
-    {
-//    time1= (Filteredpitch) * 5.5;
-//        for(i=0; i<50; i++)
-//          {
-//            /* Given 10us trigger pulse */
-//            GPIO_PORTA_DATA_R |= (1<<4); /* make control  pin high */
-//            Delay_MicroSecond(time1); /*2.0ms seconds delay */
-//            GPIO_PORTA_DATA_R &= ~(1<<4); /* make trigger  pin high */
-//            Delay_MicroSecond(20000-time1); /*18.0ms seconds delay */
-//              }
-        ui8Adjust=100;
-        if (ui8Adjust>120)
-        {
-            ui8Adjust=120;
-        }
-    }
-    else if (Filteredpitch<0.0)
-    {
-        ui8Adjust= 70;
-                if (ui8Adjust<60)
-                {
-                    ui8Adjust=60;
-                }
-    }
-//    else if (Filteredpitch<0.0)
-//       {
-//       //servo_delay1= (Filteredpitch) * 5.5;
-//       //servo_delay= int(servo_delay1);
-//
-//       Delay_MicroSecond(10000);
-//       GPIO_PORTA_DATA_R |= (1<<4);
-//       Delay_MicroSecond(20000);
-//       GPIO_PORTA_DATA_R &= ~(1<<4);
-//       Delay_MicroSecond(17000);
-//
-//       }
+
+    //  pitch = i32IPart[9];
+
+      if (fabs(pitch - prevpitch) > 5)
+      {
+          ROM_IntMasterDisable();
+          if (pitch > 5 && pitch > 0)
+          {
+              diff = 1050 - ((i32IPart[9]) * (325 / 45));
+              Servo_var(diff);
+//                state_update = 0xFF;
+//                state = 0x05;
+//                LCD_default_display(LCD_state5);
+
+          }
+          else if (pitch < (-5) && pitch < 0)
+          {
+              diff = ((fabs(i32IPart[9] - 0)) * (425 / 45)) + 1050;
+              Servo_var(diff);
+//                state_update = 0xFF;
+//                state = 0x06;
+//                LCD_default_display(LCD_state6);
+
+          }
+          else if (pitch > (45))
+          {
+              Servo_var(725);
+          }
+          else if (pitch < (-45))
+          {
+              Servo_var(2000);
+          }
+          ROM_IntMasterEnable();
+      }
+
 }
 
 int
@@ -1052,7 +1346,7 @@ main(void)
 {   disable_irq();
 
 // Necessary definitions to write data into Port F
-    SYSCTL_RCGC2_R |=   0x00000020;   /* enable clock to GPIOF at clock gating control register */
+    SYSCTL_RCGC2_R |=   0x00000023;   /* enable clock to GPIOF at clock gating control register */
     GPIO_PORTF_DIR_R =  0x0E;        /* enable the GPIO pins for the LED (PF3, 2 1) as output */
     GPIO_PORTF_LOCK_R = 0x4C4F434B;   /* unlock commit register GPIOCR */
     GPIO_PORTF_CR_R =   0x01;         /* make PORTF0 configurable */
@@ -1074,14 +1368,15 @@ main(void)
 
     ConfigureUART();
     MPU9150_IN_IT();
+    BMP180_IN_IT();
     Timer0ACapture_init();  /*initialize Timer0A in edge edge time */
     configure_systick();
-    SERVO_PWM_init();
+    //SERVO_PWM_init();
 
     ADC_PWM_init();
     Motor_in_it();
     enable_irq();
-   // PortAB_INIT();                  /* Initialize Port A and Port B */
+    //PortAB_INIT();                  /* Initialize Port A and Port B */
     strcpy(version,"FLIGHT DESIGN");    /* Initialization of the contents to be displayed on LCD */
    // LCD_init();
    // LCD_PutData(version,32);
@@ -1089,12 +1384,14 @@ main(void)
     while(1)
     {
         //UARTprintf("1\n");
-       // ultrasonic();
+        ultrasonic();
         MPU9150();
+        BMP180();
         mode();
         tailmotor();
         HEADmotor();
         SERVO_control();
+        debug[0]= GPIO_PORTE_DATA_R;
     }
 
 }
@@ -1119,6 +1416,30 @@ void Motor_in_it()
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_5, ui8Adjust_motor * ui32Load_motor / 1000);
     PWMOutputState(PWM0_BASE, PWM_OUT_5_BIT, true);
     PWMGenEnable(PWM0_BASE, PWM_GEN_2);
+    /* Enable Peripheral Clocks */
+//      SYSCTL_RCGCPWM_R |= 2; /* enable clock to PWM Module 1 and Module 0 */
+//      SYSCTL_RCGCGPIO_R |= 0x10; /* enable clock to PORTE */
+//      SYSCTL_RCC_R |= 0x00100000; /* pre-divide by 64 */
+//  //    SYSCTL_RCC_R &= ~0x00100000; /* pre-divide by 64 */
+//      SYSCTL_RCC_R |= 0x000E0000;
+//      /* Enable port PE4 for PWM1 M1PWM2, PE5 for M0PWM5 */
+//      GPIO_PORTE_AFSEL_R = 0x20; /* PE4 and PE5 uses alternate function */
+//      GPIO_PORTE_PCTL_R &= ~0x00F00000; /* make PE4 and PE5 PWM output pin */
+//      GPIO_PORTE_PCTL_R |= 0x00500000;
+//      GPIO_PORTE_DEN_R |= 0x20; /* pin digital */
+//
+//      delayMs(10);
+//
+//      //PWM Module 1 Generator 1
+//      PWM1_3_CTL_R &= ~(1<<0); /* stop counter */
+//      PWM1_3_CTL_R &= ~(1<<1);
+//      PWM1_3_GENB_R = 0x0000008C; /* M1PWM2 output set when reload, */
+//      /* clear when match PWMCMPA */
+//      PWM1_3_LOAD_R = 5000; /* set load value for 1kHz (16MHz/16000) */
+//      PWM1_3_CMPA_R = 4999; /* set duty cycle to min */
+//      PWM1_3_CTL_R = 1; /* start timer */
+//      PWM1_ENABLE_R = 0x04; /* start PWM1 ch2 */
+
 
 
     //direction of motor 2 - PC6 and PC7 (main motor)
@@ -1138,10 +1459,10 @@ void ADC_PWM_init()
  //    SYSCTL_RCC_R &= ~0x00100000; /* pre-divide by 64 */
      SYSCTL_RCC_R |= 0x000E0000;
      /* Enable port PE4 for PWM1 M1PWM2, PE5 for M0PWM5 */
-     GPIO_PORTE_AFSEL_R = 0x30; /* PE4 and PE5 uses alternate function */
+     GPIO_PORTE_AFSEL_R = 0x10; /* PE4 and PE5 uses alternate function */
      GPIO_PORTE_PCTL_R &= ~0x000F0000; /* make PE4 and PE5 PWM output pin */
      GPIO_PORTE_PCTL_R |= 0x00050000;
-     GPIO_PORTE_DEN_R |= 0x30; /* pin digital */
+     GPIO_PORTE_DEN_R |= 0x10; /* pin digital */
 
      delayMs(10);
 
@@ -1176,10 +1497,11 @@ void ADC_PWM_init()
 
      //direction of motor 1 - PE2 and PE3
      SYSCTL_RCGCGPIO_R |= 0x10;
-     GPIO_PORTE_DIR_R |= (1<<2)|(1<<3);
-     GPIO_PORTE_DEN_R |= (1<<2)|(1<<3);
-     GPIO_PORTE_DATA_R |= (1<<2);
-     GPIO_PORTE_DATA_R &= ~(1<<3);
+                 GPIO_PORTE_DIR_R |= (1<<2)|(1<<3);
+                 GPIO_PORTE_DEN_R |= (1<<2)|(1<<3);
+                 GPIO_PORTE_DATA_R |= (1<<2);
+                 GPIO_PORTE_DATA_R &= ~(1<<3);
+                delayMs(60);
 
 //     //direction of motor 2 - PC6 and PC7
 //     SYSCTL_RCGCGPIO_R |= 0x04;
@@ -1194,52 +1516,45 @@ void SERVO_PWM_init()
     ////**************** For Servo Motor*******************************////
 
 
+    /* Enable Peripheral Clocks */
+    SYSCTL_RCGCPWM_R |= 2; /* enable clock to PWM1 */
+    SYSCTL_RCGCGPIO_R |= 0x20; /* enable clock to PORTF */
+    //SYSCTL_RCC_R &= ~0x00100000; /* no pre-divide for PWM clock */
+    //SYSCTL_RCC_R |= 0x000E0000;
+    /* Enable port PF2 for PWM1 M1PWM7 */
+    GPIO_PORTF_AFSEL_R = 6; /* PF2 uses alternate function */
+    GPIO_PORTF_PCTL_R &= ~0x00000F00; /* make PF2 PWM output pin */
+    GPIO_PORTF_PCTL_R |= 0x00000500;
+    GPIO_PORTF_DEN_R |= 6; /* pin digital */
 
-//    /* Enable Peripheral Clocks */
-//    SYSCTL_RCGCPWM_R |= 2; /* enable clock to PWM1 */
-//    SYSCTL_RCGCGPIO_R |= 0x20; /* enable clock to PORTF */
-//    //SYSCTL_RCC_R &= ~0x00100000; /* no pre-divide for PWM clock */
-//    //SYSCTL_RCC_R |= 0x000E0000;
-//    /* Enable port PF2 for PWM1 M1PWM7 */
-//    GPIO_PORTF_AFSEL_R = 6; /* PF2 uses alternate function */
-//    GPIO_PORTF_PCTL_R &= ~0x00000F00; /* make PF2 PWM output pin */
-//    GPIO_PORTF_PCTL_R |= 0x00000500;
-//    GPIO_PORTF_DEN_R |= 6; /* pin digital */
-//    // Set the pin as an output
-//    GPIO_PORTA_DIR_R |= 0x10;  // Set PB0 as an output
+
+    PWM1_3_CTL_R &= ~(1<<0); /* stop counter */
+    PWM1_3_CTL_R &= ~(1<<1);
+    PWM1_3_GENA_R = 0x0000008C; /* M1PWM7 output set when reload, */
+    /* clear when match PWMCMPA */
+    PWM1_3_LOAD_R |= 5000; /* set load value for 1kHz (16MHz/16000) */
+    PWM1_3_CMPA_R |= 4999; /* set duty cycle to min */
+    PWM1_3_CTL_R |= 1; /* start timer */
+    PWM1_ENABLE_R |= 0x40; /* start PWM1 ch7 */
+    //
+    ////////////////////////////////////////////////////////////////////
+       ////////////////////////////////////////////////////////////////////
+//       SysCtlPWMClockSet(SYSCTL_PWMDIV_64); // CLOCK_CPU/64
 //
-//        // Enable the pin
-//    GPIO_PORTA_DEN_R |= 0x10;  // Enable digital function for PB0
+//        SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0); // PWM Module 0
+//        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC); // PC4
+//        delayMs(10);
 //
-//    PWM1_3_CTL_R &= ~(1<<0); /* stop counter */
-//    PWM1_3_CTL_R &= ~(1<<1);
-//    PWM1_3_GENA_R = 0x0000008C; /* M1PWM7 output set when reload, */
-//    /* clear when match PWMCMPA */
-//    GPIO_PORTA_DR2R_R |= 0x10;  // Set PA4 to 2mA drive strength
-//    PWM1_3_LOAD_R |= 5000; /* set load value for 1kHz (16MHz/16000) */
-//    PWM1_3_CMPA_R |= 4999; /* set duty cycle to min */
-//    PWM1_3_CTL_R |= 1; /* start timer */
-//    PWM1_ENABLE_R |= 0x40; /* start PWM1 ch7 */
-//    //
-//    ////////////////////////////////////////////////////////////////////
+//        GPIOPinTypePWM(GPIO_PORTC_BASE, GPIO_PIN_4);
+//        GPIOPinConfigure(GPIO_PC4_M0PWM6); //M0 PWM6
+//
+//        ui32PWMClock = SysCtlClockGet() / 64;
+//        ui32Load = (ui32PWMClock / PWM_FREQUENCY) - 1;
+//        PWMGenConfigure(PWM0_BASE, PWM_GEN_3, PWM_GEN_MODE_DOWN);
+//        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, ui32Load);
 
-    SysCtlPWMClockSet(SYSCTL_PWMDIV_64); // CLOCK_CPU/64
 
-        SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0); // PWM Module 0
-        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC); // PC4
-        delayMs(10);
 
-        GPIOPinTypePWM(GPIO_PORTC_BASE, GPIO_PIN_4);
-        GPIOPinConfigure(GPIO_PC4_M0PWM6); //M0 PWM6
-
-        ui32PWMClock = SysCtlClockGet() / 64;
-        ui32Load = (ui32PWMClock / PWM_FREQUENCY) - 1;
-        PWMGenConfigure(PWM0_BASE, PWM_GEN_3, PWM_GEN_MODE_DOWN);
-        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, ui32Load);
-
-        PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, ui8Adjust * ui32Load / 1000);
-        PWMOutputState(PWM0_BASE, PWM_OUT_6_BIT, true);
-        PWMGenEnable(PWM0_BASE, PWM_GEN_3);
 }
 
 
@@ -1266,10 +1581,10 @@ for(i = 0 ; i < n; i++)
 for(j = 0; j < 1000; j++) {}    /* do nothing for 1 ms */
 
 }
-void SysTick_Handler(void)  //100 ms delay
-{
-    //if required
-}
+//void SysTick_Handler(void)  //100 ms delay
+//{
+//    //if required
+//}
 
 void Delay_MicroSecond(int time)
 {
@@ -1278,7 +1593,7 @@ void Delay_MicroSecond(int time)
     TIMER1_CTL_R = 0;            /* disable Timer before initialization */
     TIMER1_CFG_R = 0x04;         /* 16-bit option */
     TIMER1_TAMR_R = 0x02;        /* periodic mode and down-counter */
-    TIMER1_TAILR_R = 16 - 1;  /* TimerA interval load value reg */
+    TIMER1_TAILR_R = 40 - 1;  /* TimerA interval load value reg */
     TIMER1_ICR_R = 0x1;          /* clear the TimerA timeout flag */
     TIMER1_CTL_R |= 0x01;        /* enable Timer A after initialization */
     for(i = 0; i < time; i++)
