@@ -32,7 +32,7 @@ void DisableInterrupts(void); // Function to disable interrupts
 void task0(void);   /* task 0 makes the RED LED ON continuously and also displays the count on the right most SSD*/
 void task1(void);   /* task 1 makes the BLUE LED ON continuously and displays its count on the second SSD from the right*/
 void task2(void);   /* task 2 makes the GREEN LED ON continuously and displays its count on the third SSD from the right*/
-void task3(void);   /* task 3 makes the WHITE LED ON continuously and displays its count on the second SSD from the right*/
+void task3(void);   /* task 3 makes the WHITE LED ON continuously and displays its count on the fourth SSD from the right*/
 void task4(void);   /* task 4 is to send sin wave values from the look up table to LTC 1661 DAC*/
 void task5(void);   /* task5 makes use of dynamically allocated memory to do its function */
 void task6(void);   /* task6 also makes use of dynamically allocated memory to do its functions */
@@ -67,14 +67,22 @@ unsigned int data = 0; // variable to hold the sin value that is sent to the LTC
 int mem = -1;          // variable to store the return value of HeapMemInit() function
 
 // For debugging purposes
-int debug_var[50];     // Variable used for debugging purposes
-void* debug_ptr1;
-void* debug_ptr2;
-extern unsigned int __heap_start__;
-extern unsigned int __heap_end__;
-extern unsigned int __HeapLimit;
-extern unsigned int _stack;
-extern unsigned int __bss_start__;
-unsigned int heap_start;
-unsigned int heap_end;
+int debug_var[50];
+int debug_var_task4, debug_var_task5, debug_var_task6;
+
+extern unsigned int __heap_start__;  // Indicates start of the heap section in memory
+unsigned int heap_start;             // To store the start of heap section of memory
+
+/*  The following character arrays are used to print information regarding the memory that is
+    allocated and de-allocated to tasks 5 and 6
+ */
+char task5_alloc[50];
+char task6_alloc[50];
+
+char task5_dealloc[50];
+char task6_dealloc[50];
+
+char task5_location[50];
+char task6_location[50];
+
 
