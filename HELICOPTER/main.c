@@ -119,9 +119,9 @@
 
 
 #define ALPHA 0.1f
-#define GREEN_ON GPIO_PORTF_DATA_R=0x08
+#define GREEN_ON GPIO_PORTF_DATA_R =0x08
 #define RED_ON (GPIO_PORTF_DATA_R = 0x02)
-#define YELLOW_ON GPIO_PORTF_DATA_R=0x0A  // turn on red and green
+#define YELLOW_ON GPIO_PORTF_DATA_R =0x0A  // turn on red and green
 #define OFF GPIO_PORTF_DATA_R=0x00        // turn of all leds
 #define  PWM_FREQUENCY_MOTOR 1000
 #define  PWM_FREQUENCY 50
@@ -142,7 +142,7 @@ uint32_t ui32Load_motor, ui32PWMClock,ui8Adjust_motor=0, ui32Load,ui8Adjust=83;
 uint32_t time; /*stores pulse on time */
 uint32_t distance; /* stores measured distance value */
 char mesg[240];  /* string format of distance value */
-int frac,i,servo_delay;
+int frac,servo_delay;
 int real,status,speed,PWMout_H,PWMout_T,pulse;
 char version[30];
 float pitch, yaw,Filteredpitch =0.0, prevpitch=0.0, prevyaw=0.0,Filteredyaw=0.0, prevMag_z=0.0, Distance;
@@ -968,16 +968,13 @@ void MPU9150()
               if (Mag_z-prevMag_z<5.0)
               {
 
-                  status = 1;
+                  if(Distance > 30 ) {status = 1;} // Adding the distance check so that FLIGHT MODE does not Over-Ride OBSTACLE MODE
                   prevMag_z= Mag_z;
-                  Z_I= Mag_z;
-                  Z_F = Mag_z*1000-Mag_z;
-                  Z_F = Z_F%1000;
-                 // mode();
+
 
               }
               else if(Mag_z-prevMag_z>5.0){
-                  status = 2;
+//                  status = 2;
                   prevMag_z= Mag_z;
                //   mode();
               }
@@ -1004,8 +1001,17 @@ void MPU9150()
 //TO CONTROL THE CHANGES OF BLINKING LED, DATA PRINTING ON LCD
 void mode(){
     switch(status){
+       case 3:
+            debug[11]+= 1;
+            GPIO_PORTF_DATA_R = 0x00; //Yellow
+            UARTprintf("\r\033[22;24H                                  ");
+            UARTprintf("\r\033[22;24H OBSTACLE DETECTED\n");
+
+            break;
+
         case 1:
-                GREEN_ON;
+               debug[10] += 1;
+                GPIO_PORTF_DATA_R = 0x08; // Green
                // LCD_PutData("Flight",12);
                 UARTprintf("\r\033[22;24H                                   ");
                 UARTprintf("\r\033[22;24H FLIGHT MODE\n");
@@ -1020,12 +1026,6 @@ void mode(){
                 UARTprintf("\r\033[22;24H                                   ");
                 UARTprintf("\r\033[22;24H ASCENDING OR DESCENDING MODE\n");
                // LCD_PutData("Flight1",12);
-
-                break;
-        case 3:
-                YELLOW_ON;
-                UARTprintf("\r\033[22;24H                                  ");
-                UARTprintf("\r\033[22;24H OBSTACLE DETECTED\n");
 
                 break;
         case 4:
@@ -1148,7 +1148,7 @@ void LCD_PutData(char* data,int size_int)
 
 
     //   Each time we load portB with necessary data, we need to send appropriate control signals to PORTA so that it can latch on to the data.
-
+     int i;
     for(i = 0;i<size_int;i++)
     {
         GPIO_PORTB_DATA_R = data[i];
@@ -1186,7 +1186,7 @@ void ultrasonic()
            status=3;
            //UARTprintf("OBSTACLE DETECTED");
            GPIO_PORTD_DATA_R |= 0X80;
-           //GPIO_PORTF_DATA_R |= 0X0B; //for indication by led on tiva board
+          // YELLOW_ON //for indication by led on tiva board
        }
        else
        {
@@ -1291,7 +1291,8 @@ void HEADmotor()
 }
 void Servo_var(int time)
 {
-     i=0;
+    int i;
+
       for(i=0; i<50; i++)
     {
       /* Given 10us trigger pulse */
@@ -1307,37 +1308,55 @@ void SERVO_control()
 
     //  pitch = i32IPart[9];
 
-      if (fabs(pitch - prevpitch) > 5)
-      {
-          ROM_IntMasterDisable();
-          if (pitch > 5 && pitch > 0)
-          {
-              diff = 1050 - ((i32IPart[9]) * (325 / 45));
-              Servo_var(diff);
+//      if (fabs(pitch - prevpitch) > 5)
+//      {
+//          ROM_IntMasterDisable();
+//          if (pitch > 5 && pitch > 0)
+//          {
+//              diff = 1050 - ((i32IPart[9]) * (325 / 45));
+//              Servo_var(diff);
 //                state_update = 0xFF;
 //                state = 0x05;
 //                LCD_default_display(LCD_state5);
+    if (pitch>5.0)
+    {
+    ui8Adjust = 120;
+    }
+    else if (pitch<-5.0)
+        {
+        ui8Adjust = 55;
+        }
+    else
+    {
+        ui8Adjust = 83;
+    }
+    PWMPulseWidthSet(PWM0_BASE, PWM_OUT_6, ui8Adjust * ui32Load / 1000);
+         PWMOutputState(PWM0_BASE, PWM_OUT_6_BIT, true);
+         PWMGenEnable(PWM0_BASE, PWM_GEN_3);
+//          }
+//          else if (pitch < (-5) && pitch < 0)
+//          {
+//              diff = ((fabs(i32IPart[9] - 0)) * (425 / 45)) + 1050;
+//              Servo_var(diff);
+////                state_update = 0xFF;
+////                state = 0x06;
+////                LCD_default_display(LCD_state6);
+//
+//          }
+//          else if (pitch > (45))
+//          {
+ //            Servo_var(725);
+//          }
+//          else if (pitch < (-45))
+//          {
+//              Servo_var(2000);
+//          }
+//          ROM_IntMasterEnable();
+      //}
 
-          }
-          else if (pitch < (-5) && pitch < 0)
-          {
-              diff = ((fabs(i32IPart[9] - 0)) * (425 / 45)) + 1050;
-              Servo_var(diff);
-//                state_update = 0xFF;
-//                state = 0x06;
-//                LCD_default_display(LCD_state6);
 
-          }
-          else if (pitch > (45))
-          {
-              Servo_var(725);
-          }
-          else if (pitch < (-45))
-          {
-              Servo_var(2000);
-          }
-          ROM_IntMasterEnable();
-      }
+
+
 
 }
 
@@ -1371,7 +1390,7 @@ main(void)
     BMP180_IN_IT();
     Timer0ACapture_init();  /*initialize Timer0A in edge edge time */
     configure_systick();
-    //SERVO_PWM_init();
+    SERVO_PWM_init();
 
     ADC_PWM_init();
     Motor_in_it();
@@ -1382,7 +1401,7 @@ main(void)
    // LCD_PutData(version,32);
 
     while(1)
-    {
+    {   debug[2]= GPIO_PORTF_DATA_R;
         //UARTprintf("1\n");
         ultrasonic();
         MPU9150();
@@ -1390,8 +1409,9 @@ main(void)
         mode();
         tailmotor();
         HEADmotor();
-        SERVO_control();
-        debug[0]= GPIO_PORTE_DATA_R;
+       // SERVO_control();
+        debug[0]= ui32PWMClock;
+        debug[1]= GPIO_PORTF_DATA_R;
     }
 
 }
@@ -1514,44 +1534,44 @@ void ADC_PWM_init()
 void SERVO_PWM_init()
 {
     ////**************** For Servo Motor*******************************////
-
-
-    /* Enable Peripheral Clocks */
-    SYSCTL_RCGCPWM_R |= 2; /* enable clock to PWM1 */
-    SYSCTL_RCGCGPIO_R |= 0x20; /* enable clock to PORTF */
-    //SYSCTL_RCC_R &= ~0x00100000; /* no pre-divide for PWM clock */
-    //SYSCTL_RCC_R |= 0x000E0000;
-    /* Enable port PF2 for PWM1 M1PWM7 */
-    GPIO_PORTF_AFSEL_R = 6; /* PF2 uses alternate function */
-    GPIO_PORTF_PCTL_R &= ~0x00000F00; /* make PF2 PWM output pin */
-    GPIO_PORTF_PCTL_R |= 0x00000500;
-    GPIO_PORTF_DEN_R |= 6; /* pin digital */
-
-
-    PWM1_3_CTL_R &= ~(1<<0); /* stop counter */
-    PWM1_3_CTL_R &= ~(1<<1);
-    PWM1_3_GENA_R = 0x0000008C; /* M1PWM7 output set when reload, */
-    /* clear when match PWMCMPA */
-    PWM1_3_LOAD_R |= 5000; /* set load value for 1kHz (16MHz/16000) */
-    PWM1_3_CMPA_R |= 4999; /* set duty cycle to min */
-    PWM1_3_CTL_R |= 1; /* start timer */
-    PWM1_ENABLE_R |= 0x40; /* start PWM1 ch7 */
-    //
-    ////////////////////////////////////////////////////////////////////
+//
+//
+//    /* Enable Peripheral Clocks */
+//    SYSCTL_RCGCPWM_R |= 2; /* enable clock to PWM1 */
+//    SYSCTL_RCGCGPIO_R |= 0x20; /* enable clock to PORTF */
+//    //SYSCTL_RCC_R &= ~0x00100000; /* no pre-divide for PWM clock */
+//    //SYSCTL_RCC_R |= 0x000E0000;
+//    /* Enable port PF2 for PWM1 M1PWM7 */
+//    GPIO_PORTF_AFSEL_R = 6; /* PF2 uses alternate function */
+//    GPIO_PORTF_PCTL_R &= ~0x00000F00; /* make PF2 PWM output pin */
+//    GPIO_PORTF_PCTL_R |= 0x00000500;
+//    GPIO_PORTF_DEN_R |= 6; /* pin digital */
+//
+//
+//    PWM1_3_CTL_R &= ~(1<<0); /* stop counter */
+//    PWM1_3_CTL_R &= ~(1<<1);
+//    PWM1_3_GENA_R = 0x0000008C; /* M1PWM7 output set when reload, */
+//    /* clear when match PWMCMPA */
+//    PWM1_3_LOAD_R |= 5000; /* set load value for 1kHz (16MHz/16000) */
+//    PWM1_3_CMPA_R |= 4999; /* set duty cycle to min */
+//    PWM1_3_CTL_R |= 1; /* start timer */
+//    PWM1_ENABLE_R |= 0x40; /* start PWM1 ch7 */
+//    //
+//    ////////////////////////////////////////////////////////////////////
        ////////////////////////////////////////////////////////////////////
-//       SysCtlPWMClockSet(SYSCTL_PWMDIV_64); // CLOCK_CPU/64
-//
-//        SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0); // PWM Module 0
-//        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC); // PC4
-//        delayMs(10);
-//
-//        GPIOPinTypePWM(GPIO_PORTC_BASE, GPIO_PIN_4);
-//        GPIOPinConfigure(GPIO_PC4_M0PWM6); //M0 PWM6
-//
-//        ui32PWMClock = SysCtlClockGet() / 64;
-//        ui32Load = (ui32PWMClock / PWM_FREQUENCY) - 1;
-//        PWMGenConfigure(PWM0_BASE, PWM_GEN_3, PWM_GEN_MODE_DOWN);
-//        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, ui32Load);
+       SysCtlPWMClockSet(SYSCTL_PWMDIV_64); // CLOCK_CPU/64
+
+        SysCtlPeripheralEnable(SYSCTL_PERIPH_PWM0); // PWM Module 0
+        SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC); // PC4
+        delayMs(10);
+
+        GPIOPinTypePWM(GPIO_PORTC_BASE, GPIO_PIN_4);
+        GPIOPinConfigure(GPIO_PC4_M0PWM6); //M0 PWM6
+
+        ui32PWMClock = SysCtlClockGet() / 64;
+        ui32Load = (ui32PWMClock / PWM_FREQUENCY) - 1;
+        PWMGenConfigure(PWM0_BASE, PWM_GEN_3, PWM_GEN_MODE_DOWN);
+        PWMGenPeriodSet(PWM0_BASE, PWM_GEN_3, ui32Load);
 
 
 
