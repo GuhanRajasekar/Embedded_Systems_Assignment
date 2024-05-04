@@ -33,7 +33,6 @@ void Init_Systick(void)
     NVIC_ST_RELOAD_R = 15999999; // reload value corresponding to 1 second
     NVIC_ST_CTRL_R = 7;
     NVIC_SYS_PRI3_R= (NVIC_SYS_PRI3_R & 0x1fffffff) | 0x60000000;
-    debug_var[0] = NVIC_SYS_PRI3_R; // to check the priority level of Systick Interrupt
 }
 
 // Function to initialize the dummy stack for the all the background tasks
@@ -80,25 +79,25 @@ void OS_AddThreads()
 
 
     Set_initial_stack(0);  // Set up dummy stack for task0 that will be used to save the context for task 0
-    stacks[0][STACK_SIZE-2] = (long)(task0); // store the function pointer of task0 in the last but first location of the dummy array of task0
+    stacks[0][STACK_SIZE-2] = (long)(task0); // store the function pointer of task0 in the last but first location of the dummy array of task0. This is for the Program Counter
 
     Set_initial_stack(1); // Set up dummy stack for task1 that will be used to save the context for task 1
-    stacks[1][STACK_SIZE-2] = (long)(task1);  // store the function pointer of task1 in the last but first location of the dummy array of task1
+    stacks[1][STACK_SIZE-2] = (long)(task1);  // store the function pointer of task1 in the last but first location of the dummy array of task1. This is for the Program Counter
 
     Set_initial_stack(2); // Set up dummy stack for task2 that will be used to save the context for task 2
-    stacks[2][STACK_SIZE-2] = (long)(task2);  // store the function pointer of task2 in the last but first location of the dummy array of task2
+    stacks[2][STACK_SIZE-2] = (long)(task2);  // store the function pointer of task2 in the last but first location of the dummy array of task2. This is for the Program Counter
 
     Set_initial_stack(3); // Set up dummy stack for task3 that will be used to save the context for task 3
-    stacks[3][STACK_SIZE-2] = (long)(task3);  // store the function pointer of task3 in the last but first location of the dummy array of task3
+    stacks[3][STACK_SIZE-2] = (long)(task3);  // store the function pointer of task3 in the last but first location of the dummy array of task3. This is for the Program Counter
 
     Set_initial_stack(4);  // Set up dummy stack for task4 that will be used to save the context for task 4
-    stacks[4][STACK_SIZE-2] = (long)(task4); // store the function pointer of task4 in the last but first location of the dummy array of task4
+    stacks[4][STACK_SIZE-2] = (long)(task4); // store the function pointer of task4 in the last but first location of the dummy array of task4. This is for the Program Counter
 
     Set_initial_stack(5);  // Set up dummy stack for task5 that will be used to save the context for task 5
-    stacks[5][STACK_SIZE-2] = (long)(task5); // store the function pointer of task5 in the last but first location of the dummy array of task5
+    stacks[5][STACK_SIZE-2] = (long)(task5); // store the function pointer of task5 in the last but first location of the dummy array of task5. This is for the Program Counter
 
     Set_initial_stack(6);  // Set up dummy stack for task5 that will be used to save the context for task 6
-    stacks[6][STACK_SIZE-2] = (long)(task6); // store the function pointer of task6 in the last but first location of the dummy array of task6
+    stacks[6][STACK_SIZE-2] = (long)(task6); // store the function pointer of task6 in the last but first location of the dummy array of task6. This is for the Program Counter
 
     runpt = &tcbs[0]; // Make runpt point to tcb of the first task
 }
@@ -124,13 +123,12 @@ int main()
 {
     DisableInterrupts();                                 // Disable the interrupts
     heap_start = (unsigned int)&__heap_start__;          // storing the start  address of heap memory section
-    mem = HeapMemInit((void*)heap_start, 128 , 16);      // Heap memory initialization (128 bytes of memory in chunks of 16 bytes)
+    mem = HeapMemInit((void*)heap_start, 512 , 16);      // Heap memory initialization (512 bytes of memory in chunks of 16 bytes)
     Init_PortAB();                                       // Initialize ports A and B
     Init_PortC();                                        // Initialize Port C
     Init_PortE();                                        // Intialize Port E
     Init_PortF();                                        // Initialize Port F
     Init_Systick();                                      // Initialize Systick Timer
-    debug_var[1] = NVIC_PRI0_R;
 
     //UART Initialization
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
@@ -314,9 +312,7 @@ void task6(void)
         {
            if(flag2 == 0)
            {
-//               DisableInterrupts();          // Disable interrupts before getting memory from heap
                ptr2 = MemAlloc(16);            // Request 16 bytes of memory from Heap Section
-//               EnableInterrupts();           // Enable the interrupts once memory allocation is done
                ptr_task6  = (int *)ptr2;       // Store the starting address of allocated memory in ptr_task5 pointer
                *ptr_task6 = 0;                 // Initialize 0 in the location pointed to by ptr_task5
                strcpy(task6_alloc,"Memory allocated to task6 at location: ");
@@ -335,9 +331,7 @@ void task6(void)
                for(int i=1;i<=500;i++) delay_1ms();  // wait for 0.5s
                if(*ptr_task6 == 11)
                {
-//                   DisableInterrupts();  // Disable the interrupt when you are trying to free up the used memory
                    MemFree(ptr2);        // To Free up the memory
-//                   EnableInterrupts();   // Once memory deallocation is done, enable the interrupts again
                    strcpy(task6_dealloc,"Memory deallocated to task6 at location: ");
                    strcat(task6_dealloc, task6_location);
 
@@ -366,7 +360,12 @@ void DisableInterrupts(void)
 
 
 // Systick_Handler() function is the preemptive scheduler that will determine which background task needs to be run next
-__attribute__((naked))        // DOUBT : What does naked do ???
+
+/*
+  When we add __attribute__((naked)) command, it means we are responsible for managing the function's stack frame.
+  This involves saving and restoring the context of the function. This is done using assembly code as shown in the function.
+ */
+__attribute__((naked))
 void SysTick_Handler(void)
 {
     // The following 5 lines of assembly code will help us save the context of the background task that is currently running
@@ -385,7 +384,7 @@ void SysTick_Handler(void)
         runpt = runpt->next;             //make runpt point to the tcb of the next task to be performed
         switch(runpt->priority)
         {
-           case 0:  count = 15;  break;
+           case 0:  count = 18;  break;
            case 1:  count = 10;  break;
            case 2:  count =  8;  break;
            case 4:  count =  6;  break;
@@ -401,7 +400,10 @@ void SysTick_Handler(void)
     asm("LDR SP,[R1]");       // Dereferencing R1 gives "sp" of the new task. This value is loaded to SP so that SP now points to the dummy array of the task that needs to be executed
     asm("POP {R4-R11}");      // Transfer the contents of the new task on to the registers R4 - R11 and start executing the new task
     asm("CPSIE I");           // Enable interrupts
-    asm("BX LR");             // What does this do ?
+
+    // Branch to the address contained in the Link Register (LR).
+    //Used to return from the interrupt handler, effectively restoring the context of the interrupted code and continuing its execution.
+    asm("BX LR");
 
 }
 
@@ -437,10 +439,10 @@ void GPIO_PORTC_Handler(void)
             print_newline();
         }
 
-        else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70)        // Right most key in the last row
+        else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70)         // Right most key in the last row
         {
             for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
-            HeapMemDump();
+            HeapMemDump();   // output snapshot of memory usage
         }
     }
     GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
@@ -525,7 +527,6 @@ void HeapMemDump()
             FreeBlock = (BLOCK_HEADER *)(FreeBlock->pChildBlock);
         }
         while (FreeBlock != NULL);
-
     }
     return;
 }
