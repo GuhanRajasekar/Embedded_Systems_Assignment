@@ -274,8 +274,6 @@ void task5(void)
 
               ptr_task5 = (int *)ptr;  // Store the starting address of allocated memory in ptr_task5 pointer
               *ptr_task5 = 0;          // Initialize 0 in the location pointed to by ptr_task5
-              HeapMemDump();    // For printing and viewing purposes
-
               flag = 1;
           }
           else
@@ -291,10 +289,9 @@ void task5(void)
                   print_newline();
                   print(task5_dealloc);
                   print_newline();
-
                   flag = 0;      // Start the process all over again
               }
-              HeapMemDump();    // For printing and viewing purposes
+
           }
 
        }
@@ -329,7 +326,6 @@ void task6(void)
                print_newline();
                print(task6_alloc);
                print_newline();
-
                flag2 = 1;
 
            }
@@ -348,7 +344,6 @@ void task6(void)
                    print_newline();
                    print(task6_dealloc);
                    print_newline();
-
                    flag2 = 0;          // Start the process all over again
                }
            }
@@ -445,9 +440,7 @@ void GPIO_PORTC_Handler(void)
         else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70)        // Right most key in the last row
         {
             for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
-            print_newline();
-            print("Process is more important than the results");
-            print_newline();
+            HeapMemDump();
         }
     }
     GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
@@ -491,16 +484,48 @@ void HeapMemDump()
 {
     BLOCK_HEADER *UsedBlock,*FreeBlock;
     if(HeapInitFlag ==0) print("No Heap Memory Exists");
-//    else
-//    {
-//        UsedBlock = psFirstUsedBlock;
-//        print("Used Blocks: ");
-//        do
-//        {
-//            UARTprintf("Block ID = %d, Start Addr = %08x , Size = %d\n",UsedBlock->uiBlockID,UsedBlock,UsedBlock->uiSize);
-//            UsedBlock = (BLOCK_HEADER *)(UsedBlock->pChildBlock);
-//        }
-//        while (UsedBlock != NULL);
-//    }
+    else
+    {
+        UsedBlock = psFirstUsedBlock;
+        print("\n\rUsed Blocks:\n\r");
+        do
+        {
+            itoa(UsedBlock->uiBlockID , block_id , 10);  // The third argument 10 deontes the base
+            itoa((int)UsedBlock ,start_addr,10);
+            itoa(UsedBlock->uiSize ,size,10);
+
+            //UARTprintf("Block ID = %d, Start Addr = %08x , Size = %d\n",UsedBlock->uiBlockID,UsedBlock,UsedBlock->uiSize);
+            print("Block ID = ");
+            print(block_id);
+            print(", Start Address = ");
+            print(start_addr);
+            print(", Size = ");
+            print(size);
+            print_newline();
+
+            UsedBlock = (BLOCK_HEADER *)(UsedBlock->pChildBlock);
+        }
+        while (UsedBlock != NULL);
+
+        FreeBlock = psFirstFreeBlock;
+        print("\n\rFree Blocks:\n\r");
+        do
+        {
+//            UARTprintf("Block ID = %d, Start Addr = %08x , Size = %d\n",FreeBlock->uiBlockID,FreeBlock,FreeBlock->uiSize);
+            itoa(FreeBlock->uiBlockID , block_id , 10);
+            itoa((int)FreeBlock,start_addr,10);
+            itoa(FreeBlock->uiSize,size,10);
+            print("Block ID = ");
+            print(block_id);
+            print(", Start Address = ");
+            print(start_addr);
+            print(", Size = ");
+            print(size);
+            print_newline();
+            FreeBlock = (BLOCK_HEADER *)(FreeBlock->pChildBlock);
+        }
+        while (FreeBlock != NULL);
+
+    }
     return;
 }
