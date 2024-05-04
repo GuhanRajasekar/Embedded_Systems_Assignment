@@ -86,5 +86,3 @@ char task6_dealloc[50];
 
 char task5_location[50];
 char task6_location[50];
-
-

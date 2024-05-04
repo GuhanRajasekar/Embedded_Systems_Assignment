@@ -1,4 +1,5 @@
 
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -17,6 +18,13 @@
 #include "HeapMem.h"
 #include "GPIO.h"
 
+// The following variables have been defined in HeapMem.c file
+extern unsigned int uiBlockID;
+extern int HeapInitFlag;
+extern int HeapSize;
+extern int HeapUnitSize;
+extern void *pHeapStartAddr;
+extern int BlockHeaderSize;
 
 // Function to initialize Systick Timer
 void Init_Systick(void)
@@ -261,7 +269,7 @@ void task5(void)
               print(task5_alloc);
               ptr_task5 = (int *)ptr;  // Store the starting address of allocated memory in ptr_task5 pointer
               *ptr_task5 = 0;          // Initialize 0 in the location pointed to by ptr_task5
-
+              HeapMemDump();    // For printing and viewing purposes
               flag = 1;
           }
           else
@@ -276,6 +284,7 @@ void task5(void)
                   print(task5_dealloc);
                   flag = 0;      // Start the process all over again
               }
+              HeapMemDump();    // For printing and viewing purposes
           }
 
        }
@@ -388,6 +397,7 @@ void SysTick_Handler(void)
 // Function to handle key press as interrupts
 void GPIO_PORTC_Handler(void)
 {
+    DisableInterrupts();    // Disable the interrupts
     if((GPIO_PORTC_DATA_R & 0xF0) != 0xF0)  // Key Press Detected
     {
         GPIO_PORTE_DATA_R = 0x07; // Driving PE3 low   (Last row driven low)
@@ -400,47 +410,24 @@ void GPIO_PORTC_Handler(void)
 
         else if((GPIO_PORTC_DATA_R & 0xF0) == 0xD0)         // Second key from the left in the last row
         {
-            char* p = "Inhale.... Exhale.....and Repeat\n";
-            int m = 0; // for indexing purposes
             for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
-            while(p[m] != '\0')
-              {
-                 UARTCharPut(UART0_BASE, p[m]);
-                 m = m+1;
-              }
-            UARTCharPut(UART0_BASE, '\n');
-            UARTCharPut(UART0_BASE, '\r');
+            print("Inhale.... Exhale.....and Repeat");
         }
 
         else if((GPIO_PORTC_DATA_R & 0xF0) == 0xB0)        // Third key from the left in the last row
         {
-            char* q = "This mini project is a Pre-Emptive Task Scheduler done as part of Embedded Systems Course\n";
-            int j = 0; // for indexing purposes
             for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
-            while(q[j] != '\0')
-              {
-                 UARTCharPut(UART0_BASE, q[j]);
-                 j = j+1;
-              }
-            UARTCharPut(UART0_BASE, '\n');
-            UARTCharPut(UART0_BASE, '\r');
+            print("This mini project is a Pre-Emptive Task Scheduler done as part of Embedded Systems Course");
         }
 
         else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70)        // Right most key in the last row
         {
-            char* r = "Process is more important than the results\n";
-            int k = 0; // for indexing purposes
             for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
-            while(r[k] != '\0')
-              {
-                 UARTCharPut(UART0_BASE, r[k]);
-                 k = k+1;
-              }
-            UARTCharPut(UART0_BASE, '\n');
-            UARTCharPut(UART0_BASE, '\r');
+            print("Process is more important than the results");
         }
     }
     GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
+    EnableInterrupts();      // Enable the interrupts
 }
 
 // Function to add a delay of 1ms
@@ -471,17 +458,10 @@ void print(char text[])
 }
 
 //To provide output snapshot of memory usage
-//void HeapMemDump()
-//{
-//    BLOCK_HEADER *UsedBlock,*FreeBlock;
-//    if(HeapInitFlag ==0)
-//    {
-//        char text1[] = "No Heap Memory exists";
-//        print(text1);
-//    }
-//
-//    else
-//    {
-//
-//    }
-//}
+void HeapMemDump()
+{
+    BLOCK_HEADER *UsedBlock,*FreeBlock;
+    if(HeapInitFlag ==0) print("No Heap Memory Exists");
+    else                 print("Heap Memory Exists");
+    return;
+}
