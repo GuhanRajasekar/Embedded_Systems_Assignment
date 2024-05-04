@@ -44,9 +44,11 @@ void Set_initial_stack(int i);  // Function to set up the initial stack
 void OS_AddThreads(void);
 //void OS_AddThreads(void(*task0)(void), void(*task1)(void),void(*task2)(void),void(*task3)(void),void(*task4)(void));
 
-void delay_1ms(void);  // Function to add a delay of 1ms
-int detectKeyPress(void);  // Function to detect key press
-int processKeyPress(void); // Function for key press identification
+void delay_1ms(void);       // Function to add a delay of 1ms
+int  detectKeyPress(void);  // Function to detect key press
+int  processKeyPress(void); // Function for key press identification
+void print(char[]);         // Function to print the given character array
+void HeapMemDump(void);     // Function to provide output snapshot if memory usage
 
 char NUMto7SEG[10] = {    0x3f,  // 0
                           0x06,  // 1

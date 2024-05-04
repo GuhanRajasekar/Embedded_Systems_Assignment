@@ -24,6 +24,7 @@ void Init_Systick(void)
     NVIC_ST_RELOAD_R = 15999999; // reload value corresponding to 1 second
     NVIC_ST_CTRL_R = 7;
     NVIC_SYS_PRI3_R= (NVIC_SYS_PRI3_R & 0x1fffffff) | 0x60000000;
+    debug_var[0] = NVIC_SYS_PRI3_R; // to check the priority level of Systick Interrupt
 }
 
 // Function to initialize the dummy stack for the all the background tasks
@@ -120,9 +121,9 @@ int main()
     Init_PortE();                                        // Intialize Port E
     Init_PortF();                                        // Initialize Port F
     Init_Systick();                                      // Initialize Systick Timer
+    debug_var[1] = NVIC_PRI0_R;
 
     //UART Initialization
-
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
     GPIOPinConfigure(GPIO_PA0_U0RX);
@@ -132,7 +133,6 @@ int main()
 
     configure_spi();                                     // Configure the spi to send values to DAC
     OS_AddThreads();                                     // Form a linked list, chaining the TCBs of the tasks together
-    //    OS_AddThreads(&task0, &task1, &task2, &task3, &task4);
     start_os();
     return 0; // Program Control never reaches this point
 }
@@ -258,20 +258,7 @@ void task5(void)
               strcpy(task5_alloc, "Memory allocated to task5 at location: ");
               itoa((int)ptr,task5_location,10); // third argument of 10 denotes decimal base
               strcat(task5_alloc, task5_location);
-              int index5 = 0;
-
-              UARTCharPut(UART0_BASE, '\n');
-              UARTCharPut(UART0_BASE, '\r');
-              while(task5_alloc[index5] != '\0')
-                {
-                   UARTCharPut(UART0_BASE, task5_alloc[index5]);
-                   index5 = index5+1;
-                }
-
-              UARTCharPut(UART0_BASE, '\n');
-              UARTCharPut(UART0_BASE, '\r');
-              task5_alloc[0] = '\0'; // Empty the array for printing next time
-
+              print(task5_alloc);
               ptr_task5 = (int *)ptr;  // Store the starting address of allocated memory in ptr_task5 pointer
               *ptr_task5 = 0;          // Initialize 0 in the location pointed to by ptr_task5
 
@@ -286,20 +273,7 @@ void task5(void)
                   MemFree(ptr);  // To Free up the memory
                   strcpy(task5_dealloc , "Memory de-allocated to task5 at location: ");
                   strcat(task5_dealloc, task5_location);
-                  int index5 = 0;
-
-                  UARTCharPut(UART0_BASE, '\n');
-                  UARTCharPut(UART0_BASE, '\r');
-                  while(task5_dealloc[index5] != '\0')
-                    {
-                       UARTCharPut(UART0_BASE, task5_dealloc[index5]);
-                       index5 = index5+1;
-                    }
-
-                  UARTCharPut(UART0_BASE, '\n');
-                  UARTCharPut(UART0_BASE, '\r');
-                  task5_dealloc[0] = '\0'; // Empty the array for printing next time
-
+                  print(task5_dealloc);
                   flag = 0;      // Start the process all over again
               }
           }
@@ -329,23 +303,11 @@ void task6(void)
 //               EnableInterrupts();           // Enable the interrupts once memory allocation is done
                ptr_task6  = (int *)ptr2;       // Store the starting address of allocated memory in ptr_task5 pointer
                *ptr_task6 = 0;                 // Initialize 0 in the location pointed to by ptr_task5
-               flag2 = 1;
-
                strcpy(task6_alloc,"Memory allocated to task6 at location: ");
                itoa((int)ptr2,task6_location,10); // third argument of 10 denotes decimal base
                strcat(task6_alloc, task6_location);
-               int index6 = 0;
-               UARTCharPut(UART0_BASE, '\n');
-               UARTCharPut(UART0_BASE, '\r');
-               while(task6_alloc[index6] != '\0')
-                 {
-                    UARTCharPut(UART0_BASE, task6_alloc[index6]);
-                    index6 = index6+1;
-                 }
-
-               UARTCharPut(UART0_BASE, '\n');
-               UARTCharPut(UART0_BASE, '\r');
-               task6_alloc[0] = '\0'; // Empty the array for printing next time
+               print(task6_alloc);
+               flag2 = 1;
 
            }
            else
@@ -357,21 +319,10 @@ void task6(void)
 //                   DisableInterrupts();  // Disable the interrupt when you are trying to free up the used memory
                    MemFree(ptr2);        // To Free up the memory
 //                   EnableInterrupts();   // Once memory deallocation is done, enable the interrupts again
-                   flag2 = 0;          // Start the process all over again
                    strcpy(task6_dealloc,"Memory deallocated to task6 at location: ");
                    strcat(task6_dealloc, task6_location);
-                   int index6 = 0;
-                   UARTCharPut(UART0_BASE, '\n');
-                   UARTCharPut(UART0_BASE, '\r');
-                   while(task6_dealloc[index6] != '\0')
-                     {
-                        UARTCharPut(UART0_BASE, task6_dealloc[index6]);
-                        index6 = index6+1;
-                     }
-
-                   UARTCharPut(UART0_BASE, '\n');
-                   UARTCharPut(UART0_BASE, '\r');
-                   task6_dealloc[0] = '\0'; // Empty the array for printing next time
+                   print(task6_dealloc);
+                   flag2 = 0;          // Start the process all over again
                }
            }
 
@@ -501,3 +452,36 @@ void delay_1ms(void)
             // Do nothing for 1 ms
        }
 }
+
+//Function to print contents of the given array
+void print(char text[])
+{
+    UARTCharPut(UART0_BASE, '\n');
+    UARTCharPut(UART0_BASE, '\r');
+    int index = 0;
+    while(text[index] != '\0')
+    {
+        UARTCharPut(UART0_BASE, text[index]);
+        index = index+1;
+    }
+    UARTCharPut(UART0_BASE, '\n');
+    UARTCharPut(UART0_BASE, '\r');
+
+    text[0] = '\0'; // Empty the contents of the array before the next print process
+}
+
+//To provide output snapshot of memory usage
+//void HeapMemDump()
+//{
+//    BLOCK_HEADER *UsedBlock,*FreeBlock;
+//    if(HeapInitFlag ==0)
+//    {
+//        char text1[] = "No Heap Memory exists";
+//        print(text1);
+//    }
+//
+//    else
+//    {
+//
+//    }
+//}
