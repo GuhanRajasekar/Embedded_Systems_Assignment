@@ -48,6 +48,7 @@ void delay_1ms(void);       // Function to add a delay of 1ms
 int  detectKeyPress(void);  // Function to detect key press
 int  processKeyPress(void); // Function for key press identification
 void print(char[]);         // Function to print the given character array
+void print_newline(void);   // Function to print a gap of one line in UART terminal
 void HeapMemDump(void);     // Function to provide output snapshot if memory usage
 
 char NUMto7SEG[10] = {    0x3f,  // 0

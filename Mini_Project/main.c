@@ -25,6 +25,7 @@ extern int HeapSize;
 extern int HeapUnitSize;
 extern void *pHeapStartAddr;
 extern int BlockHeaderSize;
+extern BLOCK_HEADER *psFirstUsedBlock,*psFirstFreeBlock;
 
 // Function to initialize Systick Timer
 void Init_Systick(void)
@@ -266,10 +267,15 @@ void task5(void)
               strcpy(task5_alloc, "Memory allocated to task5 at location: ");
               itoa((int)ptr,task5_location,10); // third argument of 10 denotes decimal base
               strcat(task5_alloc, task5_location);
+
+              print_newline();
               print(task5_alloc);
+              print_newline();
+
               ptr_task5 = (int *)ptr;  // Store the starting address of allocated memory in ptr_task5 pointer
               *ptr_task5 = 0;          // Initialize 0 in the location pointed to by ptr_task5
               HeapMemDump();    // For printing and viewing purposes
+
               flag = 1;
           }
           else
@@ -281,7 +287,11 @@ void task5(void)
                   MemFree(ptr);  // To Free up the memory
                   strcpy(task5_dealloc , "Memory de-allocated to task5 at location: ");
                   strcat(task5_dealloc, task5_location);
+
+                  print_newline();
                   print(task5_dealloc);
+                  print_newline();
+
                   flag = 0;      // Start the process all over again
               }
               HeapMemDump();    // For printing and viewing purposes
@@ -315,7 +325,11 @@ void task6(void)
                strcpy(task6_alloc,"Memory allocated to task6 at location: ");
                itoa((int)ptr2,task6_location,10); // third argument of 10 denotes decimal base
                strcat(task6_alloc, task6_location);
+
+               print_newline();
                print(task6_alloc);
+               print_newline();
+
                flag2 = 1;
 
            }
@@ -330,7 +344,11 @@ void task6(void)
 //                   EnableInterrupts();   // Once memory deallocation is done, enable the interrupts again
                    strcpy(task6_dealloc,"Memory deallocated to task6 at location: ");
                    strcat(task6_dealloc, task6_location);
+
+                   print_newline();
                    print(task6_dealloc);
+                   print_newline();
+
                    flag2 = 0;          // Start the process all over again
                }
            }
@@ -411,19 +429,25 @@ void GPIO_PORTC_Handler(void)
         else if((GPIO_PORTC_DATA_R & 0xF0) == 0xD0)         // Second key from the left in the last row
         {
             for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
+            print_newline();
             print("Inhale.... Exhale.....and Repeat");
+            print_newline();
         }
 
         else if((GPIO_PORTC_DATA_R & 0xF0) == 0xB0)        // Third key from the left in the last row
         {
             for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
+            print_newline();
             print("This mini project is a Pre-Emptive Task Scheduler done as part of Embedded Systems Course");
+            print_newline();
         }
 
         else if((GPIO_PORTC_DATA_R & 0xF0) == 0x70)        // Right most key in the last row
         {
             for(int wait = 0; wait<80; wait++) delay_1ms(); // To avoid debouncing issues
+            print_newline();
             print("Process is more important than the results");
+            print_newline();
         }
     }
     GPIO_PORTC_ICR_R = 0xF0; // Clearing the interrupts
@@ -443,18 +467,23 @@ void delay_1ms(void)
 //Function to print contents of the given array
 void print(char text[])
 {
-    UARTCharPut(UART0_BASE, '\n');
-    UARTCharPut(UART0_BASE, '\r');
     int index = 0;
     while(text[index] != '\0')
     {
         UARTCharPut(UART0_BASE, text[index]);
         index = index+1;
     }
+    text[0] = '\0'; // Empty the contents of the array before the next print process
+    return;
+}
+
+
+// Function to print gap of one line
+void print_newline()
+{
     UARTCharPut(UART0_BASE, '\n');
     UARTCharPut(UART0_BASE, '\r');
-
-    text[0] = '\0'; // Empty the contents of the array before the next print process
+    return;
 }
 
 //To provide output snapshot of memory usage
@@ -462,6 +491,16 @@ void HeapMemDump()
 {
     BLOCK_HEADER *UsedBlock,*FreeBlock;
     if(HeapInitFlag ==0) print("No Heap Memory Exists");
-    else                 print("Heap Memory Exists");
+//    else
+//    {
+//        UsedBlock = psFirstUsedBlock;
+//        print("Used Blocks: ");
+//        do
+//        {
+//            UARTprintf("Block ID = %d, Start Addr = %08x , Size = %d\n",UsedBlock->uiBlockID,UsedBlock,UsedBlock->uiSize);
+//            UsedBlock = (BLOCK_HEADER *)(UsedBlock->pChildBlock);
+//        }
+//        while (UsedBlock != NULL);
+//    }
     return;
 }
