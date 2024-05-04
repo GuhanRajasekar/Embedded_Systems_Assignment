@@ -735,7 +735,7 @@ void BMP180()
     // Print altitude with three digits of decimal precision.
     //
     UARTprintf("Altitude %3d.%03d", i32PIntegerPart, i32PFractionPart);
-    Alt = i32PIntegerPart+abs(i32PFractionPart/1000);
+    Alt = i32PIntegerPart;
 
 //    X_F =Filterd_Alt*1000 -Filterd_Alt;
 //    X_I=Filterd_Alt;
@@ -744,7 +744,7 @@ void BMP180()
     // Print new line.
     //
 
-      if (Alt-prev_Alt>40.0)
+      if (Alt-prev_Alt>5.0)
       {    RED_ON;
           UARTprintf("\r\033[22;2H                                  ");
           UARTprintf("\r\033[22;2H FREE FALL\n");
@@ -950,7 +950,8 @@ void MPU9150()
               Filteredyaw = lowPassFilter(yaw, Filteredyaw);
               UARTprintf("\nPITCH:%3d.%03d,YAW:%3d.%03d,Z:%3d.%03d \n",X_I,X_F,Y_I,Y_F,Z_I,Z_F);
               Mag_z= i32IPart[8]+i32FPart[8]/1000;
-              FilteredMag_z = lowPassFilter(yaw, FilteredMag_z);
+              FilteredMag_z = lowPassFilter(Mag_z, FilteredMag_z);
+
               if (abs(Mag_z-prevMag_z)<1.0)
               {
 
@@ -1078,7 +1079,20 @@ void tailmotor()
         UARTprintf("\r\033[23;2H TURNING RIGHT");
     }
     else if(speed ==0 ){
-        PWM1_1_CMPA_R  = X;
+       // PWM1_1_CMPA_R  = (int)((X/1000) * 4999);
+        if (FilteredMag_z<0)
+        {
+            PWM1_1_CMPA_R=4999-1500;
+        }
+        else if (FilteredMag_z>0&&FilteredMag_z<5 )
+          {
+            PWM1_1_CMPA_R=4999-3000;
+          }
+        else if (FilteredMag_z>5 )
+           {
+            PWM1_1_CMPA_R=4999-4000;
+           }
+
         UARTprintf("\n\r\033[23;2H                                  ");
         UARTprintf("\r\033[23;2H NO ROTATION");
      //   UARTprintf("\r\033[23;2H TURNING RIGHT\n");
@@ -1231,8 +1245,13 @@ uint32_t Measure_distance(void)
 
      int lastEdge, thisEdge;
      send_trigger_pulse();
+     send_trigger_pulse();
+     send_trigger_pulse();
+     send_trigger_pulse();
+
     while(1)
     {
+
         WTIMER3_ICR_R = 4;           /* clear Wtimer2A capture flag */
         while(((WTIMER3_RIS_R & 4) == 0)) ;       /* wait till captured */
        if((GPIO_PORTD_DATA_R&(1<<2)))          /*check if rising edge occurs on PD2 echo pin*/
@@ -1286,9 +1305,22 @@ void HEADmotor()
     //ADC0_ISC_R = 8; // clear completion flag
     //temp_H=(((Mag_z)/15)*499);
     //PWMout_H=(int)temp_H;
-    X= (int)(FilteredMag_z/30) * 1000;
 
-       ui8Adjust_motor= X;
+  if (FilteredMag_z<0)
+  {
+      ui8Adjust_motor=300;
+  }
+  else if (FilteredMag_z>0&&FilteredMag_z<5 )
+    {
+      ui8Adjust_motor=600;
+    }
+  else if (FilteredMag_z>5 )
+     {
+      ui8Adjust_motor=800;
+     }
+
+
+
 
 
     PWMPulseWidthSet(PWM0_BASE, PWM_OUT_5, ui8Adjust_motor * ui32Load_motor / 1000);
@@ -1368,7 +1400,7 @@ main(void)
 
     ConfigureUART();
     MPU9150_IN_IT();
-  //  BMP180_IN_IT();
+    BMP180_IN_IT();
     Timer0ACapture_init();  /*initialize Timer0A in edge edge time */
     configure_systick();
     SERVO_PWM_init();
@@ -1383,15 +1415,15 @@ main(void)
     while(1)
     {   debug[2]= GPIO_PORTF_DATA_R;
         //UARTprintf("1\n");
-    ultrasonic();
+        ultrasonic();
         MPU9150();
 
-    //  BMP180();
+      BMP180();
       //  mode();
        HEADmotor();
        tailmotor();
        SERVO_control();
-        debug[0]= ui32PWMClock;
+        debug[0]=  PWM1_1_CMPA_R;
         debug[1]= GPIO_PORTD_DATA_R;
         debug[3]= WTIMER3_ICR_R;
     }
