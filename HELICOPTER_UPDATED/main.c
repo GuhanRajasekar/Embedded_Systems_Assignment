@@ -1008,7 +1008,6 @@ void MPU9150()
 void mode(){
     switch(status){
        case 3:
-            debug[11]+= 1;
             OFF;
             RED_ON; //Yellow
             UARTprintf("\r\033[22;24H                                  ");
@@ -1017,7 +1016,6 @@ void mode(){
             break;
 
         case 1:
-               debug[10] += 1;
                OFF;
                 GREEN_ON; // Green
                // LCD_PutData("Flight",12);
@@ -1413,7 +1411,7 @@ main(void)
    // LCD_PutData(version,32);
 
     while(1)
-    {   debug[2]= GPIO_PORTF_DATA_R;
+    {   
         //UARTprintf("1\n");
         ultrasonic();
         MPU9150();
@@ -1423,9 +1421,6 @@ main(void)
        HEADmotor();
        tailmotor();
        SERVO_control();
-        debug[0]=  PWM1_1_CMPA_R;
-        debug[1]= GPIO_PORTD_DATA_R;
-        debug[3]= WTIMER3_ICR_R;
     }
 
 }
